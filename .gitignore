@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Build artifacts
+bin/
+*.out
+
+# Runtime artifacts
+.runs/
+
+# Provider compiled binaries
+providers/demo/demo-action
+providers/http/http-action

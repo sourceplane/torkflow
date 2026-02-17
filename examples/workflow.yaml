@@ -1,0 +1,25 @@
+apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: demo-workflow
+  id: demo-workflow
+spec:
+  maxParallelSteps: 3
+  connections:
+    demo:
+      token: "demo-token"
+  steps:
+    - name: Build_Message
+      actionId: core.js
+      parameters:
+        script: "({ message: 'hello from core.js' })"
+      outboundEdges:
+        - nextStepName: Send_Message
+
+    - name: Send_Message
+      actionId: demo.echo
+      connections:
+        demo: default
+      parameters:
+        text: "{{ Steps.Build_Message.message }}"
+        channel: "general"

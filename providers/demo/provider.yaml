@@ -1,0 +1,6 @@
+provider: demo
+version: v1
+runtime: binary
+actions:
+  - id: demo.echo
+    entrypoint: ./demo-action
