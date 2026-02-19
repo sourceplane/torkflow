@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -50,9 +51,9 @@ func ifAction(input map[string]any, context map[string]any) (map[string]any, str
 }
 
 func jsAction(input map[string]any, context map[string]any) (map[string]any, string, error) {
-	script, ok := input["script"].(string)
-	if !ok {
-		return nil, "", errors.New("core.js requires script")
+	script, err := resolveScript(input)
+	if err != nil {
+		return nil, "", err
 	}
 	result, err := expression.Eval(script, context)
 	if err != nil {
@@ -62,6 +63,43 @@ func jsAction(input map[string]any, context map[string]any) (map[string]any, str
 		return resMap, "", nil
 	}
 	return map[string]any{"result": result}, "", nil
+}
+
+func resolveScript(input map[string]any) (string, error) {
+	inline, hasInline := input["script"].(string)
+	inline = strings.TrimSpace(inline)
+
+	filePath, _ := input["scriptFile"].(string)
+	if filePath == "" {
+		filePath, _ = input["scriptPath"].(string)
+	}
+	filePath = strings.TrimSpace(filePath)
+
+	if inline != "" && filePath != "" {
+		return "", errors.New("core.js accepts either script or scriptFile, not both")
+	}
+
+	if inline != "" {
+		return inline, nil
+	}
+
+	if filePath != "" {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return "", fmt.Errorf("core.js failed to read scriptFile %q: %w", filePath, err)
+		}
+		script := strings.TrimSpace(string(content))
+		if script == "" {
+			return "", fmt.Errorf("core.js scriptFile %q is empty", filePath)
+		}
+		return script, nil
+	}
+
+	if hasInline {
+		return "", errors.New("core.js script cannot be empty")
+	}
+
+	return "", errors.New("core.js requires script or scriptFile")
 }
 
 func printAction(input map[string]any, context map[string]any) (map[string]any, string, error) {

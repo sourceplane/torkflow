@@ -9,7 +9,7 @@ spec:
     - name: Build_Gemini_Prompt
       actionRef: core.js
       parameters:
-        script: "({ prompt: 'Explain why workflow determinism matters. Give 5 concise bullet points and one practical example.' })"
+        scriptFile: examples/scripts/gemini-prompt.js
       outboundEdges:
         - nextStepName: Gemini_Chat
 

@@ -131,6 +131,19 @@ This workflow:
 - runs `core.js` to create a lightweight transformed payload
 - uses `core.stdout` to emit the final payload to terminal stdout
 
+`core.js` accepts either:
+- `script`: inline JavaScript expression
+- `scriptFile`: path to a `.js` file containing the JavaScript expression
+
+Example:
+
+```yaml
+- name: Build_Gemini_Prompt
+	actionRef: core.js
+	parameters:
+		scriptFile: examples/scripts/gemini-prompt.js
+```
+
 ### Slack message via HTTP example
 
 Use [examples/slack-http-workflow.yaml](examples/slack-http-workflow.yaml) to:
