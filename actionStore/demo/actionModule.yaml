@@ -1,0 +1,35 @@
+apiVersion: engine.io/v1
+kind: ActionModule
+metadata:
+  name: demo
+  version: 1.0.0
+  description: Demo action implementations
+runtime:
+  type: binary
+  entrypoint: ./demo-action
+actions:
+  - name: demo.echo
+    description: Echo a message payload
+    timeout: 10s
+    inputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+        channel:
+          type: string
+      additionalProperties: true
+    outputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [sent, text]
+      properties:
+        sent:
+          type: boolean
+        channel:
+          type: string
+        text:
+          type: string
+      additionalProperties: true

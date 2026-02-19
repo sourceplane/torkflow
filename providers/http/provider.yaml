@@ -1,6 +1,0 @@
-provider: http
-version: v1
-runtime: binary
-actions:
-  - id: http.request
-    entrypoint: ./http-action

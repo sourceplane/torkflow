@@ -1,0 +1,24 @@
+connections:
+  - name: slack-main
+    type: http.bearer
+    secretRef: slack-main-secret
+
+  - name: demo-local
+    type: demo.token
+    secretRef: demo-local-secret
+
+  - name: openai-local
+    type: ai.openai
+    secretRef: openai-local-secret
+
+  - name: anthropic-local
+    type: ai.anthropic
+    secretRef: anthropic-local-secret
+
+  - name: bedrock-local
+    type: ai.bedrock
+    secretRef: bedrock-local-secret
+
+  - name: gemini-local
+    type: ai.gemini
+    secretRef: gemini-local-secret

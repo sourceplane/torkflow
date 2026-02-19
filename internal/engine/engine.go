@@ -5,31 +5,38 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
+	"torkflow/internal/connections"
 	"torkflow/internal/core"
 	"torkflow/internal/dag"
 	"torkflow/internal/registry"
 	"torkflow/internal/state"
+	"torkflow/internal/validation"
 	"torkflow/internal/workflow"
 )
 
 type Engine struct {
-	Workflow      workflow.Workflow
-	Graph         *dag.Graph
-	Registry      *registry.Registry
-	CoreRegistry  *core.Registry
-	Store         state.Store
-	Context       map[string]any
-	MaxParallel   int
-	ExecutionID   string
-	WorkflowID    string
-	ProvidersPath string
+	Workflow           workflow.Workflow
+	Graph              *dag.Graph
+	Registry           *registry.Registry
+	CoreRegistry       *core.Registry
+	Store              state.Store
+	Context            map[string]any
+	ContextMu          sync.RWMutex
+	MaxParallel        int
+	ExecutionID        string
+	WorkflowID         string
+	ActionStorePath    string
+	ConnectionRegistry *connections.Registry
+	SecretStore        connections.SecretStore
+	Validator          *validation.JSONSchemaValidator
 }
 
-func NewEngine(workflowPath string, runRoot string, providersPath string, executionID string) (*Engine, error) {
+func NewEngine(workflowPath string, runRoot string, actionStorePath string, connectionsPath string, secretsPath string, executionID string) (*Engine, error) {
 	wf, err := loadWorkflow(workflowPath)
 	if err != nil {
 		return nil, err
@@ -46,7 +53,15 @@ func NewEngine(workflowPath string, runRoot string, providersPath string, execut
 	runDir := filepath.Join(runRoot, workflowID, executionID)
 	store := state.NewFileStore(runDir)
 	reg := registry.NewRegistry()
-	if err := reg.LoadFromDir(providersPath); err != nil {
+	if err := reg.LoadFromDir(actionStorePath); err != nil {
+		return nil, err
+	}
+	connReg, err := connections.LoadRegistry(connectionsPath)
+	if err != nil {
+		return nil, err
+	}
+	secretStore, err := connections.LoadFileSecretStore(secretsPath)
+	if err != nil {
 		return nil, err
 	}
 
@@ -63,16 +78,19 @@ func NewEngine(workflowPath string, runRoot string, providersPath string, execut
 	}
 
 	return &Engine{
-		Workflow:      wf,
-		Graph:         graph,
-		Registry:      reg,
-		CoreRegistry:  core.NewRegistry(),
-		Store:         store,
-		Context:       ctx,
-		MaxParallel:   maxParallel,
-		ExecutionID:   executionID,
-		WorkflowID:    workflowID,
-		ProvidersPath: providersPath,
+		Workflow:           wf,
+		Graph:              graph,
+		Registry:           reg,
+		CoreRegistry:       core.NewRegistry(),
+		Store:              store,
+		Context:            ctx,
+		MaxParallel:        maxParallel,
+		ExecutionID:        executionID,
+		WorkflowID:         workflowID,
+		ActionStorePath:    actionStorePath,
+		ConnectionRegistry: connReg,
+		SecretStore:        secretStore,
+		Validator:          validation.NewJSONSchemaValidator(),
 	}, nil
 }
 
@@ -138,6 +156,9 @@ func (e *Engine) StepMap() map[string]workflow.Step {
 }
 
 func (e *Engine) SnapshotContext() (map[string]any, error) {
+	e.ContextMu.RLock()
+	defer e.ContextMu.RUnlock()
+
 	payload, err := json.Marshal(e.Context)
 	if err != nil {
 		return nil, err
@@ -150,6 +171,9 @@ func (e *Engine) SnapshotContext() (map[string]any, error) {
 }
 
 func (e *Engine) UpdateContext(stepName string, output map[string]any) error {
+	e.ContextMu.Lock()
+	defer e.ContextMu.Unlock()
+
 	steps, ok := e.Context["Steps"].(map[string]any)
 	if !ok {
 		steps = map[string]any{}
@@ -184,6 +208,38 @@ func (e *Engine) ResolveConnections(step workflow.Step) map[string]any {
 		}
 	}
 	return result
+}
+
+func (e *Engine) ResolveCredential(step workflow.Step, action registry.ActionDescriptor) (map[string]any, error) {
+	if step.Connection == "" {
+		legacy := e.ResolveConnections(step)
+		if len(legacy) == 0 {
+			if action.CredentialType != "" {
+				return nil, fmt.Errorf("action %s requires connection type %s", action.Name, action.CredentialType)
+			}
+			return map[string]any{}, nil
+		}
+		return legacy, nil
+	}
+
+	conn, ok := e.ConnectionRegistry.Get(step.Connection)
+	if !ok {
+		return nil, fmt.Errorf("connection %q not found", step.Connection)
+	}
+	if action.CredentialType != "" && conn.Type != action.CredentialType {
+		return nil, fmt.Errorf("connection %q type mismatch: got %s want %s", step.Connection, conn.Type, action.CredentialType)
+	}
+
+	credential, err := e.SecretStore.Get(conn.SecretRef)
+	if err != nil {
+		return nil, err
+	}
+	if action.CredentialSchema != nil {
+		if err := e.Validator.Validate(action.CredentialSchema, credential); err != nil {
+			return nil, fmt.Errorf("credential schema validation failed for %s: %w", action.Name, err)
+		}
+	}
+	return credential, nil
 }
 
 func (e *Engine) DetermineRetry(step workflow.Step, retryState map[string]int) (bool, time.Duration) {

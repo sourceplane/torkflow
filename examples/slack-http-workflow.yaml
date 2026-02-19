@@ -1,0 +1,186 @@
+apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: slack-http-block-message
+  id: slack-http-block-message
+spec:
+  maxParallelSteps: 4
+  steps:
+    - name: Fetch_Todo
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/todos/1
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Fetch_User
+        - nextStepName: Fetch_Post
+
+    - name: Fetch_User
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/users/{{ Steps.Fetch_Todo.json.userId }}
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Prepare_Gemini_Block_Prompt
+
+    - name: Fetch_Post
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/posts/1
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Prepare_Gemini_Block_Prompt
+
+    - name: Prepare_Gemini_Block_Prompt
+      actionRef: core.js
+      parameters:
+        script: |
+          (() => {
+            const todo = Steps.Fetch_Todo.json;
+            const user = Steps.Fetch_User.json;
+            const post = Steps.Fetch_Post.json;
+
+            const prompt = [
+              "Create a Slack Block Kit JSON ARRAY only.",
+              "Return raw JSON only. No markdown. No explanation.",
+              "Use max 5 blocks.",
+              "Include:",
+              "1) header",
+              "2) section with concise status summary",
+              "3) section with fields: owner, email, priority",
+              "4) context with execution source note",
+              "5) actions button to open URL",
+              "",
+              "DATA:",
+              `todoId: ${todo.id}`,
+              `todoTitle: ${todo.title}`,
+              `todoCompleted: ${todo.completed}`,
+              `ownerName: ${user.name}`,
+              `ownerEmail: ${user.email}`,
+              `priorityHint: ${todo.completed ? "low" : "high"}`,
+              `referenceUrl: https://jsonplaceholder.typicode.com/todos/${todo.id}`,
+              `extraContextTitle: ${post.title}`
+            ].join("\n");
+
+            return {
+              prompt,
+              fallback: {
+                text: `TODO #${todo.id} ${todo.completed ? "completed" : "open"} · ${todo.title}`,
+                owner: user.name,
+                ownerEmail: user.email,
+                priority: todo.completed ? "low" : "high",
+                referenceUrl: `https://jsonplaceholder.typicode.com/todos/${todo.id}`
+              }
+            };
+          })()
+      outboundEdges:
+        - nextStepName: Gemini_Format_Slack_Blocks
+
+    - name: Gemini_Format_Slack_Blocks
+      actionRef: ai.gemini.chat
+      connection: gemini-local
+      parameters:
+        model: gemini-2.5-flash
+        generationConfig:
+          temperature: 0.2
+        messages:
+          - role: user
+            content: "{{ Steps.Prepare_Gemini_Block_Prompt.prompt }}"
+      outboundEdges:
+        - nextStepName: Build_Slack_Message
+
+    - name: Build_Slack_Message
+      actionRef: core.js
+      parameters:
+        script: |
+          (() => {
+            const fallback = Steps.Prepare_Gemini_Block_Prompt.fallback;
+            let blocks = [];
+
+            try {
+              const cleaned = (Steps.Gemini_Format_Slack_Blocks.text || "")
+                .replace(/^```json\s*/i, "")
+                .replace(/^```\s*/i, "")
+                .replace(/```\s*$/i, "")
+                .trim();
+              const parsed = JSON.parse(cleaned);
+              if (Array.isArray(parsed)) {
+                blocks = parsed;
+              }
+            } catch (_) {}
+
+            if (!Array.isArray(blocks) || blocks.length === 0) {
+              blocks = [
+                {
+                  type: "header",
+                  text: { type: "plain_text", text: "⚠️ Workflow Notification", emoji: true }
+                },
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: fallback.text }
+                },
+                {
+                  type: "section",
+                  fields: [
+                    { type: "mrkdwn", text: `*Owner*\n${fallback.owner}` },
+                    { type: "mrkdwn", text: `*Email*\n${fallback.ownerEmail}` },
+                    { type: "mrkdwn", text: `*Priority*\n${fallback.priority}` }
+                  ]
+                },
+                {
+                  type: "actions",
+                  elements: [
+                    {
+                      type: "button",
+                      text: { type: "plain_text", text: "Open Todo", emoji: true },
+                      url: fallback.referenceUrl
+                    }
+                  ]
+                }
+              ];
+            }
+
+            const payload = {
+              channel: "C0AFET2FMNE",
+              text: fallback.text,
+              blocks
+            };
+
+            return {
+              rawBody: JSON.stringify(payload),
+              preview: payload
+            };
+          })()
+      outboundEdges:
+        - nextStepName: Send_To_Slack
+
+    - name: Send_To_Slack
+      actionRef: http.request.auth
+      connection: slack-main
+      parameters:
+        method: POST
+        url: https://slack.com/api/chat.postMessage
+        timeoutSeconds: 15
+        parseJson: true
+        headers:
+          Content-Type: application/json; charset=utf-8
+        body: "{{ Steps.Build_Slack_Message.rawBody }}"
+      outboundEdges:
+        - nextStepName: Print_Slack_Result
+
+    - name: Print_Slack_Result
+      actionRef: core.stdout
+      parameters:
+        title: Slack API Result
+        format: pretty
+        payload:
+          ok: "{{ Steps.Send_To_Slack.json.ok }}"
+          channel: "{{ Steps.Send_To_Slack.json.channel }}"
+          ts: "{{ Steps.Send_To_Slack.json.ts }}"
+          error: "{{ Steps.Send_To_Slack.json.error }}"

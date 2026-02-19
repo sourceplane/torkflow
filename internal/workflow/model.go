@@ -20,8 +20,10 @@ type WorkflowSpec struct {
 
 type Step struct {
 	Name            string            `yaml:"name"`
+	ActionRef       string            `yaml:"actionRef"`
 	ActionID        string            `yaml:"actionId"`
 	Parameters      map[string]any    `yaml:"parameters"`
+	Connection      string            `yaml:"connection"`
 	OutboundEdges   []OutboundEdge    `yaml:"outboundEdges"`
 	ReadinessGate   *ReadinessGate    `yaml:"readinessGate"`
 	ErrorHandlers   []ErrorHandler    `yaml:"errorHandlers"`
@@ -32,6 +34,13 @@ type Step struct {
 	TimeoutSeconds  int               `yaml:"timeoutSeconds"`
 	SkipExpression  string            `yaml:"skip"`
 	ContinueOnError bool              `yaml:"continueOnError"`
+}
+
+func (s Step) EffectiveActionRef() string {
+	if s.ActionRef != "" {
+		return s.ActionRef
+	}
+	return s.ActionID
 }
 
 type OutboundEdge struct {

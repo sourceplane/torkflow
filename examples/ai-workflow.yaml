@@ -1,0 +1,77 @@
+apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: ai-multi-provider-chat
+  id: ai-multi-provider-chat
+spec:
+  maxParallelSteps: 3
+  steps:
+    - name: Build_Prompt
+      actionRef: core.js
+      parameters:
+        script: "({ prompt: 'Summarize why deterministic workflows are useful in two bullet points.' })"
+      outboundEdges:
+        - nextStepName: OpenAI_Chat
+        - nextStepName: Anthropic_Chat
+        - nextStepName: Bedrock_Chat
+
+    - name: OpenAI_Chat
+      actionRef: ai.openai.chat
+      connection: openai-local
+      parameters:
+        model: gpt-4o-mini
+        temperature: 0.2
+        messages:
+          - role: user
+            content: "{{ Steps.Build_Prompt.prompt }}"
+      outboundEdges:
+        - nextStepName: Merge_AI_Responses
+
+    - name: Anthropic_Chat
+      actionRef: ai.anthropic.chat
+      connection: anthropic-local
+      parameters:
+        model: claude-3-5-sonnet-latest
+        maxTokens: 512
+        messages:
+          - role: user
+            content: "{{ Steps.Build_Prompt.prompt }}"
+      outboundEdges:
+        - nextStepName: Merge_AI_Responses
+
+    - name: Bedrock_Chat
+      actionRef: ai.bedrock.chat
+      connection: bedrock-local
+      parameters:
+        modelId: anthropic.claude-3-sonnet-20240229-v1:0
+        region: us-east-1
+        inferenceConfig:
+          maxTokens: 512
+          temperature: 0.3
+        messages:
+          - role: user
+            content: "{{ Steps.Build_Prompt.prompt }}"
+      outboundEdges:
+        - nextStepName: Merge_AI_Responses
+
+    - name: Merge_AI_Responses
+      actionRef: core.js
+      readinessGate:
+        thresholdType: ALL
+      parameters:
+        script: "({ openai: Steps.OpenAI_Chat.text, anthropic: Steps.Anthropic_Chat.text, bedrock: Steps.Bedrock_Chat.text, usage: { openai: Steps.OpenAI_Chat.usage.totalTokens, anthropic: Steps.Anthropic_Chat.usage.totalTokens, bedrock: Steps.Bedrock_Chat.usage.totalTokens } })"
+      outboundEdges:
+        - nextStepName: Print_AI_Summary
+
+    - name: Print_AI_Summary
+      actionRef: core.stdout
+      parameters:
+        title: AI Multi-Provider Summary
+        format: pretty
+        payload:
+          openai: "{{ Steps.Merge_AI_Responses.openai }}"
+          anthropic: "{{ Steps.Merge_AI_Responses.anthropic }}"
+          bedrock: "{{ Steps.Merge_AI_Responses.bedrock }}"
+          openaiTokens: "{{ Steps.Merge_AI_Responses.usage.openai }}"
+          anthropicTokens: "{{ Steps.Merge_AI_Responses.usage.anthropic }}"
+          bedrockTokens: "{{ Steps.Merge_AI_Responses.usage.bedrock }}"

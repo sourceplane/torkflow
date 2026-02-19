@@ -11,3 +11,9 @@ bin/
 # Provider compiled binaries
 providers/demo/demo-action
 providers/http/http-action
+actionStore/demo/demo-action
+actionStore/http/http-action
+actionStore/ai/ai-runtime
+
+# Local secrets
+secrets.yaml

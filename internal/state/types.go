@@ -28,3 +28,11 @@ type StepRecord struct {
 	Error     string         `json:"error,omitempty"`
 	Branch    string         `json:"branch,omitempty"`
 }
+
+type RunError struct {
+	Timestamp time.Time      `json:"timestamp"`
+	StepName  string         `json:"stepName"`
+	ActionRef string         `json:"actionRef,omitempty"`
+	Error     string         `json:"error"`
+	Input     map[string]any `json:"input,omitempty"`
+}

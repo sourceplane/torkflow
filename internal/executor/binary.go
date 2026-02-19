@@ -9,8 +9,11 @@ import (
 )
 
 type BinaryRequest struct {
+	ActionRef    string         `json:"actionRef"`
 	StepName     string         `json:"stepName"`
 	Input        map[string]any `json:"input"`
+	Credential   map[string]any `json:"credential,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 	Connections  map[string]any `json:"connections"`
 	TimeoutSecs  int            `json:"timeoutSeconds"`
 	ExecutionID  string         `json:"executionId"`
@@ -39,7 +42,22 @@ func RunBinary(entrypoint string, req BinaryRequest) (BinaryResponse, error) {
 
 	err = cmd.Run()
 	if err != nil {
-		return resp, fmt.Errorf("binary failed: %w (%s)", err, stderr.String())
+		// Providers may intentionally return rich error payload on stdout with non-zero exit.
+		if len(stdout.Bytes()) > 0 {
+			var providerResp BinaryResponse
+			if unmarshalErr := json.Unmarshal(stdout.Bytes(), &providerResp); unmarshalErr == nil {
+				if providerResp.Error != "" {
+					return resp, fmt.Errorf("binary failed: %w (%s)", err, providerResp.Error)
+				}
+			}
+		}
+
+		stderrMsg := stderr.String()
+		stdoutMsg := string(stdout.Bytes())
+		if stderrMsg == "" && stdoutMsg != "" {
+			return resp, fmt.Errorf("binary failed: %w (stdout: %s)", err, stdoutMsg)
+		}
+		return resp, fmt.Errorf("binary failed: %w (stderr: %s)", err, stderrMsg)
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
 		return resp, fmt.Errorf("invalid binary output: %w", err)

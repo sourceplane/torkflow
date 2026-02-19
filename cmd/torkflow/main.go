@@ -12,14 +12,21 @@ import (
 
 func main() {
 	workflowPath := flag.String("workflow", "workflow.yaml", "Path to workflow YAML")
-	providersPath := flag.String("providers", "providers", "Path to providers directory")
+	actionStoresPath := flag.String("action-stores", "actionStore", "Path to action store directory")
+	providersPath := flag.String("providers", "", "Deprecated: use --action-stores")
+	connectionsPath := flag.String("connections", "connections.yaml", "Path to connection registry file")
+	secretsPath := flag.String("secrets", "secrets.yaml", "Path to local secret store file")
 	runsPath := flag.String("runs", ".runs", "Path to runs directory")
 	executionID := flag.String("execution", time.Now().UTC().Format("2006-01-02T15-04-05"), "Execution ID")
 	verbose := flag.Bool("verbose", false, "Print verbose run artifact details")
 	verboseShort := flag.Bool("v", false, "Print verbose run artifact details (shorthand)")
 	flag.Parse()
 
-	eng, err := engine.NewEngine(*workflowPath, *runsPath, *providersPath, *executionID)
+	if *providersPath != "" {
+		*actionStoresPath = *providersPath
+	}
+
+	eng, err := engine.NewEngine(*workflowPath, *runsPath, *actionStoresPath, *connectionsPath, *secretsPath, *executionID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to init engine:", err)
 		os.Exit(1)

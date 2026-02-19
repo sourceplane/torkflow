@@ -74,8 +74,14 @@ func (s *Scheduler) Run() error {
 				defer func() { <-sem }()
 
 				step := steps[stepName]
+				actionRef := step.EffectiveActionRef()
+				ctxSnapshot, snapErr := s.engine.SnapshotContext()
+				if snapErr != nil {
+					s.markFailed(stepName, actionRef, snapErr, &state.StepRecord{Name: stepName, Status: "FAILED"})
+					return
+				}
 				if step.SkipExpression != "" {
-					skip, err := expression.Eval(step.SkipExpression, s.engine.Context)
+					skip, err := expression.Eval(step.SkipExpression, ctxSnapshot)
 					if err == nil {
 						if val, ok := skip.(bool); ok && val {
 							mu.Lock()
@@ -93,13 +99,15 @@ func (s *Scheduler) Run() error {
 				record.StartedAt = &started
 				_ = s.engine.Store.SaveStep(record)
 
-				input, err := resolveInput(step.Parameters, s.engine.Context)
+				input, err := resolveInput(step.Parameters, ctxSnapshot)
 				if err != nil {
-					s.markFailed(stepName, err, &record)
+					record.Input = map[string]any{"parameters": step.Parameters}
+					s.markFailed(stepName, actionRef, err, &record)
 					return
 				}
+				record.Input = input
 
-				branch, output, execErr := s.executeStep(step, input)
+				branch, output, execErr := s.executeStep(step, input, ctxSnapshot)
 				if execErr != nil {
 					s.handleFailure(step, stepName, execErr, &record, status, &completed, &failed, readyCh, &mu)
 					return
@@ -124,7 +132,7 @@ func (s *Scheduler) Run() error {
 				_ = s.updateState(status)
 				mu.Unlock()
 
-					s.scheduleOutbound(stepName, branch, inboundSatisfied, inboundTotal, status, readyCh, &mu)
+				s.scheduleOutbound(stepName, branch, inboundSatisfied, inboundTotal, status, readyCh, &mu)
 			}(stepName)
 
 		default:
@@ -168,30 +176,51 @@ func (s *Scheduler) Run() error {
 	return nil
 }
 
-func (s *Scheduler) executeStep(step workflow.Step, input map[string]any) (string, map[string]any, error) {
-	if handler, ok := s.engine.CoreRegistry.Get(step.ActionID); ok {
-		output, branch, err := handler(input, s.engine.Context)
+func (s *Scheduler) executeStep(step workflow.Step, input map[string]any, context map[string]any) (string, map[string]any, error) {
+	actionRef := step.EffectiveActionRef()
+	if handler, ok := s.engine.CoreRegistry.Get(actionRef); ok {
+		output, branch, err := handler(input, context)
 		return branch, output, err
 	}
 
-	action, ok := s.engine.Registry.Get(step.ActionID)
+	action, ok := s.engine.Registry.Get(actionRef)
 	if !ok {
-		return "", nil, fmt.Errorf("unknown action %s", step.ActionID)
+		return "", nil, fmt.Errorf("unknown action %s", actionRef)
 	}
 
-	connections := s.engine.ResolveConnections(step)
+	if action.InputSchema != nil {
+		if err := s.engine.Validator.Validate(action.InputSchema, input); err != nil {
+			return "", nil, fmt.Errorf("input schema validation failed for %s: %w", actionRef, err)
+		}
+	}
+
+	credential, err := s.engine.ResolveCredential(step, action)
+	if err != nil {
+		return "", nil, err
+	}
 	request := executor.BinaryRequest{
+		ActionRef:    actionRef,
 		StepName:     step.Name,
 		Input:        input,
-		Connections:  connections,
+		Credential:   credential,
+		Connections:  credential,
 		TimeoutSecs:  step.TimeoutSeconds,
 		ExecutionID:  s.engine.ExecutionID,
 		WorkflowID:   s.engine.WorkflowID,
-		ProviderName: action.Provider,
+		ProviderName: action.ModuleName,
+		Metadata: map[string]any{
+			"workflowId":  s.engine.WorkflowID,
+			"executionId": s.engine.ExecutionID,
+		},
 	}
 
-	resp, err := executor.WithTimeout(step.TimeoutSeconds, func() (executor.BinaryResponse, error) {
-		return executor.RunBinary(action.Entrypoint, request)
+	effectiveTimeout := step.TimeoutSeconds
+	if effectiveTimeout <= 0 {
+		effectiveTimeout = int(action.Timeout.Seconds())
+	}
+
+	resp, err := executor.WithTimeout(effectiveTimeout, func() (executor.BinaryResponse, error) {
+		return executor.RunBinary(action.Runtime.Entrypoint, request)
 	})
 	if err != nil {
 		return "", nil, err
@@ -199,6 +228,13 @@ func (s *Scheduler) executeStep(step workflow.Step, input map[string]any) (strin
 	if resp.Status != "success" {
 		return "", nil, errors.New(resp.Error)
 	}
+
+	if action.OutputSchema != nil {
+		if err := s.engine.Validator.Validate(action.OutputSchema, resp.Output); err != nil {
+			return "", nil, fmt.Errorf("output schema validation failed for %s: %w", actionRef, err)
+		}
+	}
+
 	return resp.Branch, resp.Output, nil
 }
 
@@ -246,7 +282,7 @@ func (s *Scheduler) handleFailure(step workflow.Step, stepName string, execErr e
 		return
 	}
 
-	s.markFailed(stepName, execErr, record)
+	s.markFailed(stepName, step.EffectiveActionRef(), execErr, record)
 	mu.Lock()
 	status[stepName] = "FAILED"
 	*failed += 1
@@ -267,12 +303,19 @@ func (s *Scheduler) handleFailure(step workflow.Step, stepName string, execErr e
 	}
 }
 
-func (s *Scheduler) markFailed(stepName string, err error, record *state.StepRecord) {
+func (s *Scheduler) markFailed(stepName string, actionRef string, err error, record *state.StepRecord) {
 	record.Status = "FAILED"
 	record.Error = err.Error()
 	ended := time.Now().UTC()
 	record.EndedAt = &ended
 	_ = s.engine.Store.SaveStep(*record)
+	_ = s.engine.Store.AppendRunError(state.RunError{
+		Timestamp: ended,
+		StepName:  stepName,
+		ActionRef: actionRef,
+		Error:     err.Error(),
+		Input:     record.Input,
+	})
 }
 
 func (s *Scheduler) updateState(status map[string]string) error {

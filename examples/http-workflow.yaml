@@ -10,7 +10,7 @@ spec:
       token: demo-token
   steps:
     - name: Fetch_Todo
-      actionId: http.request
+      actionRef: http.request
       parameters:
         method: GET
         url: https://jsonplaceholder.typicode.com/todos/1
@@ -20,7 +20,7 @@ spec:
         - nextStepName: Normalize_Data
 
     - name: Fetch_User
-      actionId: http.request
+      actionRef: http.request
       parameters:
         method: GET
         url: https://jsonplaceholder.typicode.com/users/1
@@ -30,7 +30,7 @@ spec:
         - nextStepName: Normalize_Data
 
     - name: Fetch_Post
-      actionId: http.request
+      actionRef: http.request
       parameters:
         method: GET
         url: https://jsonplaceholder.typicode.com/posts/1
@@ -41,14 +41,14 @@ spec:
         - nextStepName: Fetch_Comments
 
     - name: Normalize_Data
-      actionId: core.js
+      actionRef: core.js
       parameters:
         script: "({ todoId: Steps.Fetch_Todo.json.id, todoState: Steps.Fetch_Todo.json.completed ? 'done' : 'open', titleUpper: Steps.Fetch_Todo.json.title.toUpperCase(), userName: Steps.Fetch_User.json.name, userEmail: Steps.Fetch_User.json.email, postTitle: Steps.Fetch_Post.json.title })"
       outboundEdges:
         - nextStepName: Decide_Path
 
     - name: Fetch_Comments
-      actionId: http.request
+      actionRef: http.request
       retry:
         kind: RETRY_STRATEGY_LINEAR
         maxRetries: 2
@@ -62,7 +62,7 @@ spec:
         - nextStepName: Build_Final_Report
 
     - name: Decide_Path
-      actionId: core.if
+      actionRef: core.if
       parameters:
         condition: "Steps.Normalize_Data.todoState === 'done'"
       outboundEdges:
@@ -72,7 +72,7 @@ spec:
           branchName: false
 
     - name: Notify_Done
-      actionId: demo.echo
+      actionRef: demo.echo
       connections:
         demo: default
       parameters:
@@ -82,7 +82,7 @@ spec:
         - nextStepName: Branch_Merged
 
     - name: Notify_Open
-      actionId: demo.echo
+      actionRef: demo.echo
       connections:
         demo: default
       parameters:
@@ -92,7 +92,7 @@ spec:
         - nextStepName: Branch_Merged
 
     - name: Branch_Merged
-      actionId: core.js
+      actionRef: core.js
       readinessGate:
         thresholdType: ANY
       parameters:
@@ -101,14 +101,14 @@ spec:
         - nextStepName: Build_Final_Report
 
     - name: Build_Final_Report
-      actionId: core.js
+      actionRef: core.js
       parameters:
         script: "({ todoId: Steps.Normalize_Data.todoId, state: Steps.Normalize_Data.todoState, owner: Steps.Normalize_Data.userEmail, postTitle: Steps.Normalize_Data.postTitle, notification: Steps.Branch_Merged.notificationText, commentCount: Array.isArray(Steps.Fetch_Comments.json) ? Steps.Fetch_Comments.json.length : 0 })"
       outboundEdges:
         - nextStepName: Print_Final_Report
 
     - name: Print_Final_Report
-      actionId: core.stdout
+      actionRef: core.stdout
       parameters:
         title: Final Report
         format: pretty

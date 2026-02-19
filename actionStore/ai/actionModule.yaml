@@ -1,0 +1,257 @@
+apiVersion: engine.io/v1
+kind: ActionModule
+metadata:
+  name: ai
+  version: 1.0.0
+  description: Multi-provider AI runtime with action-level dispatch
+runtime:
+  type: binary
+  entrypoint: ./ai-runtime
+connectionTypes:
+  ai.openai:
+    description: OpenAI API credentials
+    schema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [apiKey]
+      properties:
+        apiKey:
+          type: string
+          minLength: 1
+        baseURL:
+          type: string
+      additionalProperties: true
+  ai.anthropic:
+    description: Anthropic API credentials
+    schema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [apiKey]
+      properties:
+        apiKey:
+          type: string
+          minLength: 1
+        baseURL:
+          type: string
+      additionalProperties: true
+  ai.bedrock:
+    description: AWS Bedrock credentials
+    schema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [accessKeyId, secretAccessKey, region]
+      properties:
+        accessKeyId:
+          type: string
+          minLength: 1
+        secretAccessKey:
+          type: string
+          minLength: 1
+        sessionToken:
+          type: string
+        region:
+          type: string
+          minLength: 1
+      additionalProperties: true
+  ai.gemini:
+    description: Gemini API credentials
+    schema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [apiKey]
+      properties:
+        apiKey:
+          type: string
+          minLength: 1
+        baseURL:
+          type: string
+      additionalProperties: true
+actions:
+  - name: ai.openai.chat
+    description: OpenAI-style chat completion
+    credentialType: ai.openai
+    timeout: 60s
+    capabilities: [supportsRetry]
+    inputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+      additionalProperties: true
+    outputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [text, toolCalls, usage, providerMetadata]
+      properties:
+        text:
+          type: string
+        toolCalls:
+          type: array
+        usage:
+          type: object
+          required: [promptTokens, completionTokens, totalTokens]
+          properties:
+            promptTokens: { type: number }
+            completionTokens: { type: number }
+            totalTokens: { type: number }
+        providerMetadata:
+          type: object
+      additionalProperties: true
+
+  - name: ai.anthropic.chat
+    description: Anthropic Claude chat completion
+    credentialType: ai.anthropic
+    timeout: 60s
+    capabilities: [supportsRetry]
+    inputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+        maxTokens:
+          type: number
+          minimum: 1
+      additionalProperties: true
+    outputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [text, toolCalls, usage, providerMetadata]
+      properties:
+        text:
+          type: string
+        toolCalls:
+          type: array
+        usage:
+          type: object
+          required: [promptTokens, completionTokens, totalTokens]
+          properties:
+            promptTokens: { type: number }
+            completionTokens: { type: number }
+            totalTokens: { type: number }
+        providerMetadata:
+          type: object
+      additionalProperties: true
+
+  - name: ai.bedrock.chat
+    description: AWS Bedrock chat completion
+    credentialType: ai.bedrock
+    timeout: 90s
+    capabilities: [supportsRetry]
+    inputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [modelId, messages]
+      properties:
+        modelId:
+          type: string
+        region:
+          type: string
+        messages:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+        inferenceConfig:
+          type: object
+      additionalProperties: true
+    outputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [text, toolCalls, usage, providerMetadata]
+      properties:
+        text:
+          type: string
+        toolCalls:
+          type: array
+        usage:
+          type: object
+          required: [promptTokens, completionTokens, totalTokens]
+          properties:
+            promptTokens: { type: number }
+            completionTokens: { type: number }
+            totalTokens: { type: number }
+        providerMetadata:
+          type: object
+      additionalProperties: true
+
+  - name: ai.gemini.chat
+    description: Google Gemini chat completion
+    credentialType: ai.gemini
+    timeout: 60s
+    capabilities: [supportsRetry]
+    inputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+        generationConfig:
+          type: object
+      additionalProperties: true
+    outputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [text, toolCalls, usage, providerMetadata]
+      properties:
+        text:
+          type: string
+        toolCalls:
+          type: array
+        usage:
+          type: object
+          required: [promptTokens, completionTokens, totalTokens]
+          properties:
+            promptTokens: { type: number }
+            completionTokens: { type: number }
+            totalTokens: { type: number }
+        providerMetadata:
+          type: object
+      additionalProperties: true

@@ -8,4 +8,5 @@ type Store interface {
 	SaveState(state State) error
 	SaveContext(context map[string]any) error
 	SaveStep(record StepRecord) error
+	AppendRunError(entry RunError) error
 }

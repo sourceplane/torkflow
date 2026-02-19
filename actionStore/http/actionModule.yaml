@@ -1,0 +1,108 @@
+apiVersion: engine.io/v1
+kind: ActionModule
+metadata:
+  name: http
+  version: 1.0.0
+  description: HTTP action implementations
+runtime:
+  type: binary
+  entrypoint: ./http-action
+connectionTypes:
+  http.bearer:
+    description: Bearer token based authorization
+    schema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [bearerToken]
+      properties:
+        bearerToken:
+          type: string
+          minLength: 1
+        headers:
+          type: object
+          additionalProperties:
+            type: [string, number, boolean]
+      additionalProperties: true
+actions:
+  - name: http.request
+    description: Execute outbound HTTP request
+    timeout: 30s
+    capabilities:
+      - idempotent
+      - supportsRetry
+    inputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          minLength: 1
+        method:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: [string, number, boolean]
+        body: {}
+        timeoutSeconds:
+          type: number
+          minimum: 1
+        parseJson:
+          type: boolean
+      additionalProperties: true
+    outputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [statusCode, body]
+      properties:
+        statusCode:
+          type: number
+        headers:
+          type: object
+        body:
+          type: string
+        json: {}
+      additionalProperties: true
+
+  - name: http.request.auth
+    description: Execute outbound HTTP request with bearer credential injection
+    credentialType: http.bearer
+    timeout: 30s
+    capabilities:
+      - idempotent
+      - supportsRetry
+    inputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          minLength: 1
+        method:
+          type: string
+        headers:
+          type: object
+          additionalProperties:
+            type: [string, number, boolean]
+        body: {}
+        timeoutSeconds:
+          type: number
+          minimum: 1
+        parseJson:
+          type: boolean
+      additionalProperties: true
+    outputSchema:
+      $schema: "http://json-schema.org/draft-07/schema#"
+      type: object
+      required: [statusCode, body]
+      properties:
+        statusCode:
+          type: number
+        headers:
+          type: object
+        body:
+          type: string
+        json: {}
+      additionalProperties: true

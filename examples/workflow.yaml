@@ -10,14 +10,14 @@ spec:
       token: "demo-token"
   steps:
     - name: Build_Message
-      actionId: core.js
+      actionRef: core.js
       parameters:
         script: "({ message: 'hello from core.js' })"
       outboundEdges:
         - nextStepName: Send_Message
 
     - name: Send_Message
-      actionId: demo.echo
+      actionRef: demo.echo
       connections:
         demo: default
       parameters:

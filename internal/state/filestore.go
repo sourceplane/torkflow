@@ -60,6 +60,23 @@ func (f *FileStore) SaveStep(record StepRecord) error {
 	return os.WriteFile(file, data, 0o644)
 }
 
+func (f *FileStore) AppendRunError(entry RunError) error {
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	file := filepath.Join(f.Root, "errors.log")
+	fd, err := os.OpenFile(file, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer fd.Close()
+	if _, err := fd.Write(append(data, '\n')); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (f *FileStore) writeJSON(name string, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
