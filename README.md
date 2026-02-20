@@ -90,7 +90,39 @@ spec:
 ## Run
 
 ```
-go run ./cmd/torkflow --workflow workflow.yaml --action-stores actionStore --connections connections.yaml --secrets secrets.yaml --runs .runs
+go run ./cmd/torkflow run --workflow workflow.yaml --action-stores actionStore --connections connections.yaml --secrets secrets.yaml --runs .runs
+```
+
+Live DAG during execution:
+
+```bash
+go run ./cmd/torkflow run --workflow workflow.yaml --view-dag
+```
+
+## View DAG
+
+```bash
+go run ./cmd/torkflow view --workflow workflow.yaml
+```
+
+If `--execution` / `-e` is not provided, `view` automatically overlays the latest run (if found under `.runs/<workflow-id>/`).
+
+Advanced runtime overlay (status + errors):
+
+```bash
+go run ./cmd/torkflow view --workflow workflow.yaml --execution <execution-id> --runs .runs
+```
+
+Shorthand:
+
+```bash
+go run ./cmd/torkflow view --workflow workflow.yaml -e <execution-id> --runs .runs
+```
+
+or pass the run directory directly:
+
+```bash
+go run ./cmd/torkflow view --workflow workflow.yaml --run-dir .runs/<workflow-id>/<execution-id>
 ```
 
 ## Connections (local file store)

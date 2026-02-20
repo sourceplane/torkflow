@@ -25,7 +25,7 @@ spec:
         timeoutSeconds: 10
         parseJson: true
       outboundEdges:
-        - nextStepName: Prepare_Gemini_Block_Prompt
+        - nextStepName: Gemini_Format_Slack_Blocks
 
     - name: Fetch_Post
       actionRef: http.request
@@ -34,13 +34,6 @@ spec:
         url: https://jsonplaceholder.typicode.com/posts/1
         timeoutSeconds: 10
         parseJson: true
-      outboundEdges:
-        - nextStepName: Prepare_Gemini_Block_Prompt
-
-    - name: Prepare_Gemini_Block_Prompt
-      actionRef: core.js
-      parameters:
-        scriptFile: examples/scripts/prepare-gemini-block-prompt.js
       outboundEdges:
         - nextStepName: Gemini_Format_Slack_Blocks
 
@@ -53,72 +46,17 @@ spec:
           temperature: 0.2
         messages:
           - role: user
-            content: "{{ Steps.Prepare_Gemini_Block_Prompt.prompt }}"
+            content:
+              fromFile:
+                path: prompts/gemini-block-prompt.md
+                template: true
       outboundEdges:
         - nextStepName: Build_Slack_Message
 
     - name: Build_Slack_Message
       actionRef: core.js
       parameters:
-        script: |
-          (() => {
-            const fallback = Steps.Prepare_Gemini_Block_Prompt.fallback;
-            let blocks = [];
-
-            try {
-              const cleaned = (Steps.Gemini_Format_Slack_Blocks.text || "")
-                .replace(/^```json\s*/i, "")
-                .replace(/^```\s*/i, "")
-                .replace(/```\s*$/i, "")
-                .trim();
-              const parsed = JSON.parse(cleaned);
-              if (Array.isArray(parsed)) {
-                blocks = parsed;
-              }
-            } catch (_) {}
-
-            if (!Array.isArray(blocks) || blocks.length === 0) {
-              blocks = [
-                {
-                  type: "header",
-                  text: { type: "plain_text", text: "⚠️ Workflow Notification", emoji: true }
-                },
-                {
-                  type: "section",
-                  text: { type: "mrkdwn", text: fallback.text }
-                },
-                {
-                  type: "section",
-                  fields: [
-                    { type: "mrkdwn", text: `*Owner*\n${fallback.owner}` },
-                    { type: "mrkdwn", text: `*Email*\n${fallback.ownerEmail}` },
-                    { type: "mrkdwn", text: `*Priority*\n${fallback.priority}` }
-                  ]
-                },
-                {
-                  type: "actions",
-                  elements: [
-                    {
-                      type: "button",
-                      text: { type: "plain_text", text: "Open Todo", emoji: true },
-                      url: fallback.referenceUrl
-                    }
-                  ]
-                }
-              ];
-            }
-
-            const payload = {
-              channel: "C0AFET2FMNE",
-              text: fallback.text,
-              blocks
-            };
-
-            return {
-              rawBody: JSON.stringify(payload),
-              preview: payload
-            };
-          })()
+        scriptFile: examples/scripts/build-slack-message.js
       outboundEdges:
         - nextStepName: Send_To_Slack
 

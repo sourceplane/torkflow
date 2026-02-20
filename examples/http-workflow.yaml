@@ -105,6 +105,13 @@ spec:
       parameters:
         script: "({ todoId: Steps.Normalize_Data.todoId, state: Steps.Normalize_Data.todoState, owner: Steps.Normalize_Data.userEmail, postTitle: Steps.Normalize_Data.postTitle, notification: Steps.Branch_Merged.notificationText, commentCount: Array.isArray(Steps.Fetch_Comments.json) ? Steps.Fetch_Comments.json.length : 0 })"
       outboundEdges:
+        - nextStepName: Sleep_10s
+
+    - name: Sleep_10s
+      actionRef: core.sleep
+      parameters:
+        duration: 10s
+      outboundEdges:
         - nextStepName: Print_Final_Report
 
     - name: Print_Final_Report

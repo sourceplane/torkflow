@@ -3,6 +3,8 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -99,7 +101,7 @@ func (s *Scheduler) Run() error {
 				record.StartedAt = &started
 				_ = s.engine.Store.SaveStep(record)
 
-				input, err := resolveInput(step.Parameters, ctxSnapshot)
+				input, err := resolveInput(step.Parameters, ctxSnapshot, s.engine.WorkflowDir)
 				if err != nil {
 					record.Input = map[string]any{"parameters": step.Parameters}
 					s.markFailed(stepName, actionRef, err, &record)
@@ -339,10 +341,10 @@ func (s *Scheduler) updateState(status map[string]string) error {
 	return s.engine.Store.SaveState(st)
 }
 
-func resolveInput(input map[string]any, context map[string]any) (map[string]any, error) {
+func resolveInput(input map[string]any, context map[string]any, workflowDir string) (map[string]any, error) {
 	resolved := map[string]any{}
 	for key, value := range input {
-		res, err := resolveAny(value, context)
+		res, err := resolveAny(value, context, workflowDir)
 		if err != nil {
 			return nil, err
 		}
@@ -351,16 +353,21 @@ func resolveInput(input map[string]any, context map[string]any) (map[string]any,
 	return resolved, nil
 }
 
-func resolveAny(value any, context map[string]any) (any, error) {
+func resolveAny(value any, context map[string]any, workflowDir string) (any, error) {
 	switch v := value.(type) {
 	case string:
 		return expression.ResolveString(v, context)
 	case map[string]any:
-		return resolveInput(v, context)
+		if len(v) == 1 {
+			if source, ok := v["fromFile"]; ok {
+				return resolveFromFile(source, context, workflowDir)
+			}
+		}
+		return resolveInput(v, context, workflowDir)
 	case []any:
 		result := make([]any, 0, len(v))
 		for _, item := range v {
-			res, err := resolveAny(item, context)
+			res, err := resolveAny(item, context, workflowDir)
 			if err != nil {
 				return nil, err
 			}
@@ -370,4 +377,61 @@ func resolveAny(value any, context map[string]any) (any, error) {
 	default:
 		return v, nil
 	}
+}
+
+func resolveFromFile(source any, context map[string]any, workflowDir string) (string, error) {
+	path := ""
+	template := false
+
+	switch v := source.(type) {
+	case string:
+		path = v
+	case map[string]any:
+		for key := range v {
+			if key != "path" && key != "template" {
+				return "", fmt.Errorf("fromFile only supports path and template fields")
+			}
+		}
+		if rawPath, ok := v["path"]; ok {
+			if s, ok := rawPath.(string); ok {
+				path = s
+			} else {
+				return "", fmt.Errorf("fromFile.path must be a string")
+			}
+		}
+		if rawTemplate, ok := v["template"]; ok {
+			if b, ok := rawTemplate.(bool); ok {
+				template = b
+			} else {
+				return "", fmt.Errorf("fromFile.template must be a boolean")
+			}
+		}
+	default:
+		return "", fmt.Errorf("fromFile must be a string path or object")
+	}
+
+	path = filepath.Clean(path)
+	if path == "." || path == "" {
+		return "", fmt.Errorf("fromFile.path cannot be empty")
+	}
+
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(workflowDir, path)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("fromFile read failed for %q: %w", path, err)
+	}
+
+	text := string(content)
+	if !template {
+		return text, nil
+	}
+
+	resolved, err := expression.ResolveString(text, context)
+	if err != nil {
+		return "", fmt.Errorf("fromFile template resolution failed for %q: %w", path, err)
+	}
+	return resolved, nil
 }

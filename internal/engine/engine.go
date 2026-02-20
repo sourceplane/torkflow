@@ -21,6 +21,7 @@ import (
 
 type Engine struct {
 	Workflow           workflow.Workflow
+	WorkflowDir        string
 	Graph              *dag.Graph
 	Registry           *registry.Registry
 	CoreRegistry       *core.Registry
@@ -37,7 +38,11 @@ type Engine struct {
 }
 
 func NewEngine(workflowPath string, runRoot string, actionStorePath string, connectionsPath string, secretsPath string, executionID string) (*Engine, error) {
-	wf, err := loadWorkflow(workflowPath)
+	workflowAbsPath, err := filepath.Abs(workflowPath)
+	if err != nil {
+		workflowAbsPath = workflowPath
+	}
+	wf, err := loadWorkflow(workflowAbsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +84,7 @@ func NewEngine(workflowPath string, runRoot string, actionStorePath string, conn
 
 	return &Engine{
 		Workflow:           wf,
+		WorkflowDir:        filepath.Dir(workflowAbsPath),
 		Graph:              graph,
 		Registry:           reg,
 		CoreRegistry:       core.NewRegistry(),

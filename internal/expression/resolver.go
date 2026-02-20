@@ -35,13 +35,35 @@ func ResolveString(input string, context map[string]any) (string, error) {
 }
 
 func Eval(expr string, context map[string]any) (any, error) {
-	vm := goja.New()
-	vm.Set("$", context)
-	vm.Set("Steps", context["Steps"])
-	vm.Set("Trigger", context["Trigger"])
+	vm := newVM(context)
 	value, err := vm.RunString(expr)
 	if err != nil {
 		return nil, err
 	}
 	return value.Export(), nil
+}
+
+func EvalScript(script string, context map[string]any) (any, error) {
+	vm := newVM(context)
+	value, err := vm.RunString(script)
+	if err == nil {
+		return value.Export(), nil
+	}
+
+	wrapped := "(function(){\n" + script + "\n})()"
+	wrappedVM := newVM(context)
+	wrappedValue, wrappedErr := wrappedVM.RunString(wrapped)
+	if wrappedErr == nil {
+		return wrappedValue.Export(), nil
+	}
+
+	return nil, err
+}
+
+func newVM(context map[string]any) *goja.Runtime {
+	vm := goja.New()
+	vm.Set("$", context)
+	vm.Set("Steps", context["Steps"])
+	vm.Set("Trigger", context["Trigger"])
+	return vm
 }

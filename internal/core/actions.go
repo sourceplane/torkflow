@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"torkflow/internal/expression"
 )
@@ -22,6 +24,7 @@ func NewRegistry() *Registry {
 		actions: map[string]Handler{
 			"core.if":       ifAction,
 			"core.js":       jsAction,
+			"core.sleep":    sleepAction,
 			"core.print":    printAction,
 			"core.stdPrint": printAction,
 			"core.stdout":   printAction,
@@ -55,7 +58,7 @@ func jsAction(input map[string]any, context map[string]any) (map[string]any, str
 	if err != nil {
 		return nil, "", err
 	}
-	result, err := expression.Eval(script, context)
+	result, err := expression.EvalScript(script, context)
 	if err != nil {
 		return nil, "", err
 	}
@@ -100,6 +103,100 @@ func resolveScript(input map[string]any) (string, error) {
 	}
 
 	return "", errors.New("core.js requires script or scriptFile")
+}
+
+func sleepAction(input map[string]any, context map[string]any) (map[string]any, string, error) {
+	d, err := resolveSleepDuration(input)
+	if err != nil {
+		return nil, "", err
+	}
+	time.Sleep(d)
+	return map[string]any{
+		"duration": d.String(),
+		"sleptMs":  d.Milliseconds(),
+	}, "", nil
+}
+
+func resolveSleepDuration(input map[string]any) (time.Duration, error) {
+	if raw, ok := input["duration"]; ok {
+		switch v := raw.(type) {
+		case string:
+			d, err := time.ParseDuration(strings.TrimSpace(v))
+			if err != nil {
+				return 0, fmt.Errorf("core.sleep invalid duration %q: %w", v, err)
+			}
+			if d < 0 {
+				return 0, errors.New("core.sleep duration cannot be negative")
+			}
+			return d, nil
+		default:
+			seconds, err := toFloat64(v)
+			if err != nil {
+				return 0, errors.New("core.sleep duration must be string or number")
+			}
+			if seconds < 0 {
+				return 0, errors.New("core.sleep duration cannot be negative")
+			}
+			return time.Duration(seconds * float64(time.Second)), nil
+		}
+	}
+
+	if raw, ok := input["seconds"]; ok {
+		seconds, err := toFloat64(raw)
+		if err != nil {
+			return 0, errors.New("core.sleep seconds must be a number")
+		}
+		if seconds < 0 {
+			return 0, errors.New("core.sleep seconds cannot be negative")
+		}
+		return time.Duration(seconds * float64(time.Second)), nil
+	}
+
+	if raw, ok := input["milliseconds"]; ok {
+		ms, err := toFloat64(raw)
+		if err != nil {
+			return 0, errors.New("core.sleep milliseconds must be a number")
+		}
+		if ms < 0 {
+			return 0, errors.New("core.sleep milliseconds cannot be negative")
+		}
+		return time.Duration(ms * float64(time.Millisecond)), nil
+	}
+
+	return 0, errors.New("core.sleep requires one of: duration, seconds, milliseconds")
+}
+
+func toFloat64(v any) (float64, error) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), nil
+	case int8:
+		return float64(n), nil
+	case int16:
+		return float64(n), nil
+	case int32:
+		return float64(n), nil
+	case int64:
+		return float64(n), nil
+	case uint:
+		return float64(n), nil
+	case uint8:
+		return float64(n), nil
+	case uint16:
+		return float64(n), nil
+	case uint32:
+		return float64(n), nil
+	case uint64:
+		return float64(n), nil
+	case float32:
+		return float64(n), nil
+	case float64:
+		return n, nil
+	case string:
+		return strconv.ParseFloat(strings.TrimSpace(n), 64)
+	default:
+		return 0, fmt.Errorf("unsupported numeric type %T", v)
+	}
 }
 
 func printAction(input map[string]any, context map[string]any) (map[string]any, string, error) {
