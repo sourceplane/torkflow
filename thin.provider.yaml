@@ -64,6 +64,13 @@ layers:
       - assets/**
     required: true
 
+  examples:
+    description: "Example workflows and configurations"
+    mediaType: application/vnd.sourceplane.examples.v1
+    includes:
+      - examples/**
+    optional: true
+
   binaries:
     linux-amd64:
       description: "Linux x86_64 binary"
