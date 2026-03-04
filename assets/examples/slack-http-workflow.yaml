@@ -1,0 +1,86 @@
+apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: slack-http-block-message
+  id: slack-http-block-message
+spec:
+  maxParallelSteps: 4
+  steps:
+    - name: Fetch_Todo
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/todos/1
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Fetch_User
+        - nextStepName: Fetch_Post
+
+    - name: Fetch_User
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/users/{{ Steps.Fetch_Todo.json.userId }}
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Gemini_Format_Slack_Blocks
+
+    - name: Fetch_Post
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/posts/1
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Gemini_Format_Slack_Blocks
+
+    - name: Gemini_Format_Slack_Blocks
+      actionRef: ai.gemini.chat
+      connection: gemini-local
+      parameters:
+        model: gemini-2.5-flash
+        generationConfig:
+          temperature: 0.2
+        messages:
+          - role: user
+            content:
+              fromFile:
+                path: prompts/gemini-block-prompt.md
+                template: true
+      outboundEdges:
+        - nextStepName: Build_Slack_Message
+
+    - name: Build_Slack_Message
+      actionRef: core.js
+      parameters:
+        scriptFile: examples/scripts/build-slack-message.js
+      outboundEdges:
+        - nextStepName: Send_To_Slack
+
+    - name: Send_To_Slack
+      actionRef: http.request.auth
+      connection: slack-main
+      parameters:
+        method: POST
+        url: https://slack.com/api/chat.postMessage
+        timeoutSeconds: 15
+        parseJson: true
+        headers:
+          Content-Type: application/json; charset=utf-8
+        body: "{{ Steps.Build_Slack_Message.rawBody }}"
+      outboundEdges:
+        - nextStepName: Print_Slack_Result
+
+    - name: Print_Slack_Result
+      actionRef: core.stdout
+      parameters:
+        title: Slack API Result
+        format: pretty
+        payload:
+          ok: "{{ Steps.Send_To_Slack.json.ok }}"
+          channel: "{{ Steps.Send_To_Slack.json.channel }}"
+          ts: "{{ Steps.Send_To_Slack.json.ts }}"
+          error: "{{ Steps.Send_To_Slack.json.error }}"

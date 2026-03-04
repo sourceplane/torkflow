@@ -1,0 +1,128 @@
+apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: http-complex-orchestration
+  id: http-complex-orchestration
+spec:
+  maxParallelSteps: 4
+  connections:
+    demo:
+      token: demo-token
+  steps:
+    - name: Fetch_Todo
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/todos/1
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Normalize_Data
+
+    - name: Fetch_User
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/users/1
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Normalize_Data
+
+    - name: Fetch_Post
+      actionRef: http.request
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/posts/1
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Normalize_Data
+        - nextStepName: Fetch_Comments
+
+    - name: Normalize_Data
+      actionRef: core.js
+      parameters:
+        script: "({ todoId: Steps.Fetch_Todo.json.id, todoState: Steps.Fetch_Todo.json.completed ? 'done' : 'open', titleUpper: Steps.Fetch_Todo.json.title.toUpperCase(), userName: Steps.Fetch_User.json.name, userEmail: Steps.Fetch_User.json.email, postTitle: Steps.Fetch_Post.json.title })"
+      outboundEdges:
+        - nextStepName: Decide_Path
+
+    - name: Fetch_Comments
+      actionRef: http.request
+      retry:
+        kind: RETRY_STRATEGY_LINEAR
+        maxRetries: 2
+        baseDelaySeconds: 1
+      parameters:
+        method: GET
+        url: https://jsonplaceholder.typicode.com/posts/{{ Steps.Fetch_Post.json.id }}/comments
+        timeoutSeconds: 10
+        parseJson: true
+      outboundEdges:
+        - nextStepName: Build_Final_Report
+
+    - name: Decide_Path
+      actionRef: core.if
+      parameters:
+        condition: "Steps.Normalize_Data.todoState === 'done'"
+      outboundEdges:
+        - nextStepName: Notify_Done
+          branchName: true
+        - nextStepName: Notify_Open
+          branchName: false
+
+    - name: Notify_Done
+      actionRef: demo.echo
+      connections:
+        demo: default
+      parameters:
+        channel: ops
+        text: "✅ TODO {{ Steps.Normalize_Data.todoId }} is DONE by {{ Steps.Normalize_Data.userName }}"
+      outboundEdges:
+        - nextStepName: Branch_Merged
+
+    - name: Notify_Open
+      actionRef: demo.echo
+      connections:
+        demo: default
+      parameters:
+        channel: ops
+        text: "⚠️ TODO {{ Steps.Normalize_Data.todoId }} is OPEN for {{ Steps.Normalize_Data.userName }}"
+      outboundEdges:
+        - nextStepName: Branch_Merged
+
+    - name: Branch_Merged
+      actionRef: core.js
+      readinessGate:
+        thresholdType: ANY
+      parameters:
+        script: "(() => { const done = Steps.Notify_Done || null; const open = Steps.Notify_Open || null; return { branch: done ? 'done' : 'open', notificationText: done ? done.text : (open ? open.text : 'none') }; })()"
+      outboundEdges:
+        - nextStepName: Build_Final_Report
+
+    - name: Build_Final_Report
+      actionRef: core.js
+      parameters:
+        script: "({ todoId: Steps.Normalize_Data.todoId, state: Steps.Normalize_Data.todoState, owner: Steps.Normalize_Data.userEmail, postTitle: Steps.Normalize_Data.postTitle, notification: Steps.Branch_Merged.notificationText, commentCount: Array.isArray(Steps.Fetch_Comments.json) ? Steps.Fetch_Comments.json.length : 0 })"
+      outboundEdges:
+        - nextStepName: Sleep_10s
+
+    - name: Sleep_10s
+      actionRef: core.sleep
+      parameters:
+        duration: 10s
+      outboundEdges:
+        - nextStepName: Print_Final_Report
+
+    - name: Print_Final_Report
+      actionRef: core.stdout
+      parameters:
+        title: Final Report
+        format: pretty
+        payload:
+          todoId: "{{ Steps.Build_Final_Report.todoId }}"
+          state: "{{ Steps.Build_Final_Report.state }}"
+          owner: "{{ Steps.Build_Final_Report.owner }}"
+          postTitle: "{{ Steps.Build_Final_Report.postTitle }}"
+          notification: "{{ Steps.Build_Final_Report.notification }}"
+          commentCount: "{{ Steps.Build_Final_Report.commentCount }}"

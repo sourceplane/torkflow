@@ -1,0 +1,38 @@
+apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: gemini-chat-example
+  id: gemini-chat-example
+spec:
+  maxParallelSteps: 2
+  steps:
+    - name: Build_Gemini_Prompt
+      actionRef: core.js
+      parameters:
+        scriptFile: examples/scripts/gemini-prompt.js
+      outboundEdges:
+        - nextStepName: Gemini_Chat
+
+    - name: Gemini_Chat
+      actionRef: ai.gemini.chat
+      connection: gemini-local
+      parameters:
+        model: gemini-2.5-flash
+        generationConfig:
+          temperature: 0.2
+        messages:
+          - role: user
+            content: "{{ Steps.Build_Gemini_Prompt.prompt }}"
+      outboundEdges:
+        - nextStepName: Print_Gemini_Result
+
+    - name: Print_Gemini_Result
+      actionRef: core.stdout
+      parameters:
+        title: Gemini Result
+        format: pretty
+        payload:
+          text: "{{ Steps.Gemini_Chat.text }}"
+          totalTokens: "{{ Steps.Gemini_Chat.usage.totalTokens }}"
+          provider: "{{ Steps.Gemini_Chat.providerMetadata.rawResponse.provider }}"
+          model: "{{ Steps.Gemini_Chat.providerMetadata.rawResponse.model }}"
