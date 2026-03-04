@@ -1,0 +1,149 @@
+apiVersion: thin.io/v1
+kind: Provider
+
+metadata:
+  name: torkflow
+  version: v0.0.0  # replaced at release time by CI
+  description: A thin, portable workflow orchestration runtime with file-backed state store and pluggable binary action stores
+  homepage: https://github.com/sourceplane/torkflow
+  maintainers:
+    - name: sourceplane-team
+      email: team@sourceplane.io
+  license: Apache-2.0
+
+distribution:
+  type: oci
+  artifactType: application/vnd.thin.provider.v1
+  ref: ghcr.io/sourceplane/torkflow
+
+goreleaser:
+  config: .goreleaser.yaml
+
+runtime:
+  default: native
+  supported:
+    - name: native
+      description: Direct binary execution (Linux, macOS)
+      tools: [direct execution]
+    - name: docker
+      description: OCI container via Docker
+      tools: [docker]
+      example: "docker run ghcr.io/sourceplane/torkflow:latest version"
+    - name: oras
+      description: OCI artifact registry (ORAS)
+      tools: [oras]
+      example: "oras pull ghcr.io/sourceplane/torkflow:latest"
+
+entrypoint:
+  executable: torkflow
+
+platforms:
+  - os: linux
+    arch: amd64
+    binary: bin/linux/amd64/torkflow
+  - os: linux
+    arch: arm64
+    binary: bin/linux/arm64/torkflow
+  - os: darwin
+    arch: amd64
+    binary: bin/darwin/amd64/torkflow
+  - os: darwin
+    arch: arm64
+    binary: bin/darwin/arm64/torkflow
+
+assets:
+  root: ./assets
+
+layers:
+  core:
+    description: "Core provider bundle (provider manifest and assets)"
+    mediaType: application/vnd.sourceplane.provider.v1
+    assetsMediaType: application/vnd.sourceplane.assets.v1
+    includes:
+      - thin.provider.yaml
+      - assets/**
+    required: true
+
+  binaries:
+    linux-amd64:
+      description: "Linux x86_64 binary"
+      mediaType: application/vnd.sourceplane.bin.linux-amd64
+      platform: linux/amd64
+      optional: false
+    linux-arm64:
+      description: "Linux ARM64 binary"
+      mediaType: application/vnd.sourceplane.bin.linux-arm64
+      platform: linux/arm64
+      optional: false
+    darwin-amd64:
+      description: "macOS Intel x86_64 binary"
+      mediaType: application/vnd.sourceplane.bin.darwin-amd64
+      platform: darwin/amd64
+      optional: false
+    darwin-arm64:
+      description: "macOS Apple Silicon ARM64 binary"
+      mediaType: application/vnd.sourceplane.bin.darwin-arm64
+      platform: darwin/arm64
+      optional: false
+
+# Capability surface exposed by this provider
+capabilities:
+  run:
+    description: Execute a workflow and manage its lifecycle
+    lifecycle:
+      stability: stable
+      introducedIn: v0.1.0
+
+    inputs:
+      - name: workflow
+        type: path
+        required: true
+        description: Path to the workflow definition file
+      - name: connections
+        type: path
+        description: Path to connections configuration file
+      - name: secrets
+        type: path
+        description: Path to secrets configuration file
+      - name: output
+        type: path
+        default: .runs
+        description: Output directory for execution state
+
+    outputs:
+      - name: execution-id
+        type: string
+        description: Unique execution identifier
+      - name: state
+        type: directory
+        description: Execution state directory with metadata, state, and step results
+
+  version:
+    description: Print build and version metadata
+    lifecycle:
+      stability: stable
+      introducedIn: v0.1.0
+
+    inputs: []
+
+    outputs:
+      - name: info
+        type: string
+        description: Version, git commit, build date, Go version, and platform
+
+  completion:
+    description: Generate shell completion scripts
+    lifecycle:
+      stability: stable
+      introducedIn: v0.1.0
+
+    inputs:
+      - name: shell
+        type: string
+        required: true
+        description: Target shell (bash, zsh, fish, powershell)
+
+    outputs:
+      - name: script
+        type: string
+        description: Shell completion script written to stdout
