@@ -8,7 +8,7 @@ TINX_OCI_DIR ?= oci
 TINX_DIST_DIR ?= dist
 TINX_ARTIFACT_DIR ?= .tinx-artifacts
 
-DEMO_PROVIDER_SRC := ./examples/providers/demo/cmd/demo-action
+DEMO_PROVIDER_SRC := ./providers/demo/cmd/demo-action
 DEMO_PROVIDER_BIN := actionStore/demo/demo-action
 HTTP_PROVIDER_SRC := ./providers/http/cmd/http-action
 HTTP_PROVIDER_BIN := actionStore/http/http-action
