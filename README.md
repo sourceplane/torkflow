@@ -225,3 +225,48 @@ Aliases are also available for compatibility: `core.print`, `core.stdPrint`.
 - Formal JSON schema for state + context
 - Provider SDK + test harness
 - OCI packaging for providers
+
+## tinx provider workflow
+
+`torkflow` now includes a tinx provider manifest at `provider.yaml`.
+
+Build/package/install via Make targets:
+
+```bash
+make tinx-release
+make tinx-init-workspace
+```
+
+By default these targets use `../tinx/tinx`; override with `TINX=tinx` if your CLI is on `PATH`.
+
+The repository keeps `provider.yaml` at `v0.0.0`; the release workflow stamps the pushed tag into the manifest before publishing.
+
+Run `view` capability through `tinx`:
+
+```bash
+make tinx-view
+```
+
+Run `run` capability through `tinx`:
+
+```bash
+make tinx-run
+```
+
+Run the full package/install/execute smoke test locally:
+
+```bash
+make tinx-smoke-test
+```
+
+The smoke test is what CI runs through `sourceplane/tinx-action`.
+
+Equivalent direct commands:
+
+```bash
+tinx release --manifest provider.yaml --main ./cmd/torkflow --dist dist --output oci
+tinx init .tinx-workspace
+tinx --workspace .tinx-workspace add ./oci as torkflow
+tinx --workspace .tinx-workspace -- torkflow view --workflow "$PWD"/examples/workflow.yaml
+tinx --workspace .tinx-workspace -- torkflow run --workflow "$PWD"/examples/workflow.yaml --action-stores "$PWD"/actionStore --connections "$PWD"/connections.yaml --secrets "$PWD"/secrets.yaml --runs "$PWD"/.runs --execution $(date -u +%Y-%m-%dT%H-%M-%S)
+```

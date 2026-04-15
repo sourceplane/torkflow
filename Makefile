@@ -1,5 +1,12 @@
 APP_NAME := torkflow
 APP_BIN := bin/$(APP_NAME)
+TINX ?= ../tinx/tinx
+TINX_MANIFEST ?= provider.yaml
+TINX_ALIAS ?= torkflow
+TINX_WORKSPACE ?= .tinx-workspace
+TINX_OCI_DIR ?= oci
+TINX_DIST_DIR ?= dist
+TINX_ARTIFACT_DIR ?= .tinx-artifacts
 
 DEMO_PROVIDER_SRC := ./examples/providers/demo/cmd/demo-action
 DEMO_PROVIDER_BIN := actionStore/demo/demo-action
@@ -14,7 +21,7 @@ PROVIDERS ?= $(ACTION_STORES)
 RUNS ?= .runs
 EXECUTION ?= $(shell date -u +%Y-%m-%dT%H-%M-%S)
 
-.PHONY: help deps build provider test run clean
+.PHONY: help deps build provider test run tinx-release tinx-init-workspace tinx-view tinx-run tinx-smoke-test clean
 
 help:
 	@echo "Targets:"
@@ -23,6 +30,11 @@ help:
 	@echo "  make provider   - Build all action store runtime binaries"
 	@echo "  make test       - Run go test ./..."
 	@echo "  make run        - Run workflow (builds provider first)"
+	@echo "  make tinx-release - Build and package torkflow as a tinx OCI provider"
+	@echo "  make tinx-init-workspace - Initialize a local tinx workspace for the packaged provider"
+	@echo "  make tinx-view  - Run 'view' capability via tinx"
+	@echo "  make tinx-run   - Run 'run' capability via tinx"
+	@echo "  make tinx-smoke-test - Package, install, and execute torkflow through tinx"
 	@echo "  make clean      - Remove build artifacts"
 
 deps:
@@ -44,8 +56,29 @@ test:
 run: provider build
 	$(APP_BIN) --workflow $(WORKFLOW) --action-stores $(ACTION_STORES) --runs $(RUNS) --execution $(EXECUTION)
 
+tinx-release:
+	$(TINX) release --manifest $(TINX_MANIFEST) --main ./cmd/torkflow --dist $(TINX_DIST_DIR) --output $(TINX_OCI_DIR)
+
+tinx-init-workspace: tinx-release
+	rm -rf $(TINX_WORKSPACE)
+	$(TINX) init $(TINX_WORKSPACE)
+	$(TINX) --workspace $(TINX_WORKSPACE) add $(abspath $(TINX_OCI_DIR)) as $(TINX_ALIAS)
+
+tinx-view: tinx-init-workspace
+	$(TINX) --workspace $(TINX_WORKSPACE) -- $(TINX_ALIAS) view --workflow $(abspath $(WORKFLOW))
+
+tinx-run: provider tinx-init-workspace
+	$(TINX) --workspace $(TINX_WORKSPACE) -- $(TINX_ALIAS) run --workflow $(abspath $(WORKFLOW)) --action-stores $(abspath $(ACTION_STORES)) --connections $(abspath connections.yaml) --secrets $(abspath secrets.yaml) --runs $(abspath $(RUNS)) --execution $(EXECUTION)
+
+tinx-smoke-test:
+	TINX_BIN="$(TINX)" bash ./scripts/smoke-tinx-provider.sh
+
 clean:
 	rm -rf bin
+	rm -rf $(TINX_DIST_DIR)
+	rm -rf $(TINX_OCI_DIR)
+	rm -rf $(TINX_WORKSPACE)
+	rm -rf $(TINX_ARTIFACT_DIR)
 	rm -f $(DEMO_PROVIDER_BIN)
 	rm -f $(HTTP_PROVIDER_BIN)
 	rm -f $(AI_PROVIDER_BIN)
