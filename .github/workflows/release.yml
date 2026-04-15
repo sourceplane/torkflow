@@ -56,4 +56,4 @@ jobs:
           output: oci
           dist: dist
           tag: ${{ github.ref_name }}
-          push: ${{ env.IMAGE_REF }}
+          registry: ${{ env.IMAGE_REF }}
