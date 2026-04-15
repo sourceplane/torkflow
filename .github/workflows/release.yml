@@ -11,7 +11,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_REF: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+  IMAGE_REF: ghcr.io/${{ github.repository }}-provider:${{ github.ref_name }}
 
 jobs:
   release:
