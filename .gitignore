@@ -4,9 +4,13 @@
 # Build artifacts
 bin/
 *.out
+dist/
+oci/
 
 # Runtime artifacts
 .runs/
+.tinx-workspace/
+.tinx-artifacts/
 
 # Provider compiled binaries
 providers/demo/demo-action

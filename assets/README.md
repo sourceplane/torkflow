@@ -18,7 +18,6 @@ These assets are included in the provider artifact when packaged as an OCI image
 
 ## Distribution
 
-Assets are included in the `core` layer of the Thin provider manifest (`thin.provider.yaml`) with the media type:
-- `application/vnd.sourceplane.assets.v1`
+Assets are included from the `provider.yaml` assets layer when the tinx provider is packaged.
 
 All files under `assets/**` are automatically included in the provider artifact.
