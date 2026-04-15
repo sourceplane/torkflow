@@ -50,10 +50,13 @@ jobs:
 
       - name: Publish OCI artifact via tinx release action
         uses: sourceplane/tinx-release-action@v2
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           manifest: provider.yaml
           main: ./cmd/torkflow
           output: oci
           dist: dist
           tag: ${{ github.ref_name }}
-          registry: ${{ env.IMAGE_REF }}
+          push: ${{ env.IMAGE_REF }}
