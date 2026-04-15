@@ -49,7 +49,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish OCI artifact via tinx release action
-        uses: sourceplane/tinx-release-action@v1
+        uses: sourceplane/tinx-release-action@v2
         with:
           manifest: provider.yaml
           main: ./cmd/torkflow
