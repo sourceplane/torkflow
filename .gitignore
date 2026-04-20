@@ -9,8 +9,8 @@ oci/
 
 # Runtime artifacts
 .runs/
-.tinx-workspace/
-.tinx-artifacts/
+.kiox-workspace/
+.kiox-artifacts/
 
 # Provider compiled binaries
 providers/demo/demo-action

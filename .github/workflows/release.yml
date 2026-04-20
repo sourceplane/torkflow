@@ -31,11 +31,11 @@ jobs:
       - name: Run tests
         run: go test -race ./...
 
-      - name: Smoke test tinx provider
-        uses: sourceplane/tinx-action@v2
+      - name: Smoke test kiox provider
+        uses: sourceplane/kiox-action@v2
         with:
           run: |
-            bash ./scripts/smoke-tinx-provider.sh
+            bash ./scripts/smoke-kiox-provider.sh
 
       - name: Stamp provider version
         run: |
@@ -48,8 +48,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish OCI artifact via tinx release action
-        uses: sourceplane/tinx-release-action@v2
+      - name: Publish OCI artifact via kiox release action
+        uses: sourceplane/kiox-release-action@v2
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

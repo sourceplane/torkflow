@@ -1,10 +1,10 @@
-apiVersion: tinx.io/v1
+apiVersion: kiox.io/v1
 kind: Provider
 metadata:
   namespace: sourceplane
   name: torkflow
   version: v0.0.0
-  description: Portable workflow orchestration runtime packaged as a tinx provider.
+  description: Portable workflow orchestration runtime packaged as a kiox provider.
   homepage: https://github.com/sourceplane/torkflow
   license: Apache-2.0
 spec:

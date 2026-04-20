@@ -1,12 +1,12 @@
 APP_NAME := torkflow
 APP_BIN := bin/$(APP_NAME)
-TINX ?= ../tinx/tinx
-TINX_MANIFEST ?= provider.yaml
-TINX_ALIAS ?= torkflow
-TINX_WORKSPACE ?= .tinx-workspace
-TINX_OCI_DIR ?= oci
-TINX_DIST_DIR ?= dist
-TINX_ARTIFACT_DIR ?= .tinx-artifacts
+KIOX ?= ../kiox/kiox
+KIOX_MANIFEST ?= provider.yaml
+KIOX_ALIAS ?= torkflow
+KIOX_WORKSPACE ?= .kiox-workspace
+KIOX_OCI_DIR ?= oci
+KIOX_DIST_DIR ?= dist
+KIOX_ARTIFACT_DIR ?= .kiox-artifacts
 
 DEMO_PROVIDER_SRC := ./providers/demo/cmd/demo-action
 DEMO_PROVIDER_BIN := actionStore/demo/demo-action
@@ -21,7 +21,7 @@ PROVIDERS ?= $(ACTION_STORES)
 RUNS ?= .runs
 EXECUTION ?= $(shell date -u +%Y-%m-%dT%H-%M-%S)
 
-.PHONY: help deps build provider test run tinx-release tinx-init-workspace tinx-view tinx-run tinx-smoke-test clean
+.PHONY: help deps build provider test run kiox-release kiox-init-workspace kiox-view kiox-run kiox-smoke-test clean
 
 help:
 	@echo "Targets:"
@@ -30,11 +30,11 @@ help:
 	@echo "  make provider   - Build all action store runtime binaries"
 	@echo "  make test       - Run go test ./..."
 	@echo "  make run        - Run workflow (builds provider first)"
-	@echo "  make tinx-release - Build and package torkflow as a tinx OCI provider"
-	@echo "  make tinx-init-workspace - Initialize a local tinx workspace for the packaged provider"
-	@echo "  make tinx-view  - Run 'view' capability via tinx"
-	@echo "  make tinx-run   - Run 'run' capability via tinx"
-	@echo "  make tinx-smoke-test - Package, install, and execute torkflow through tinx"
+	@echo "  make kiox-release - Build and package torkflow as a kiox OCI provider"
+	@echo "  make kiox-init-workspace - Initialize a local kiox workspace for the packaged provider"
+	@echo "  make kiox-view  - Run 'view' capability via kiox"
+	@echo "  make kiox-run   - Run 'run' capability via kiox"
+	@echo "  make kiox-smoke-test - Package, install, and execute torkflow through kiox"
 	@echo "  make clean      - Remove build artifacts"
 
 deps:
@@ -56,29 +56,29 @@ test:
 run: provider build
 	$(APP_BIN) --workflow $(WORKFLOW) --action-stores $(ACTION_STORES) --runs $(RUNS) --execution $(EXECUTION)
 
-tinx-release:
-	$(TINX) release --manifest $(TINX_MANIFEST) --main ./cmd/torkflow --dist $(TINX_DIST_DIR) --output $(TINX_OCI_DIR)
+kiox-release:
+	$(KIOX) release --manifest $(KIOX_MANIFEST) --main ./cmd/torkflow --dist $(KIOX_DIST_DIR) --output $(KIOX_OCI_DIR)
 
-tinx-init-workspace: tinx-release
-	rm -rf $(TINX_WORKSPACE)
-	$(TINX) init $(TINX_WORKSPACE)
-	$(TINX) --workspace $(TINX_WORKSPACE) add $(abspath $(TINX_OCI_DIR)) as $(TINX_ALIAS)
+kiox-init-workspace: kiox-release
+	rm -rf $(KIOX_WORKSPACE)
+	$(KIOX) init $(KIOX_WORKSPACE)
+	$(KIOX) --workspace $(KIOX_WORKSPACE) add $(abspath $(KIOX_OCI_DIR)) as $(KIOX_ALIAS)
 
-tinx-view: tinx-init-workspace
-	$(TINX) --workspace $(TINX_WORKSPACE) -- $(TINX_ALIAS) view --workflow $(abspath $(WORKFLOW))
+kiox-view: kiox-init-workspace
+	$(KIOX) --workspace $(KIOX_WORKSPACE) -- $(KIOX_ALIAS) view --workflow $(abspath $(WORKFLOW))
 
-tinx-run: provider tinx-init-workspace
-	$(TINX) --workspace $(TINX_WORKSPACE) -- $(TINX_ALIAS) run --workflow $(abspath $(WORKFLOW)) --action-stores $(abspath $(ACTION_STORES)) --connections $(abspath connections.yaml) --secrets $(abspath secrets.yaml) --runs $(abspath $(RUNS)) --execution $(EXECUTION)
+kiox-run: provider kiox-init-workspace
+	$(KIOX) --workspace $(KIOX_WORKSPACE) -- $(KIOX_ALIAS) run --workflow $(abspath $(WORKFLOW)) --action-stores $(abspath $(ACTION_STORES)) --connections $(abspath connections.yaml) --secrets $(abspath secrets.yaml) --runs $(abspath $(RUNS)) --execution $(EXECUTION)
 
-tinx-smoke-test:
-	TINX_BIN="$(TINX)" bash ./scripts/smoke-tinx-provider.sh
+kiox-smoke-test:
+	KIOX_BIN="$(KIOX)" bash ./scripts/smoke-kiox-provider.sh
 
 clean:
 	rm -rf bin
-	rm -rf $(TINX_DIST_DIR)
-	rm -rf $(TINX_OCI_DIR)
-	rm -rf $(TINX_WORKSPACE)
-	rm -rf $(TINX_ARTIFACT_DIR)
+	rm -rf $(KIOX_DIST_DIR)
+	rm -rf $(KIOX_OCI_DIR)
+	rm -rf $(KIOX_WORKSPACE)
+	rm -rf $(KIOX_ARTIFACT_DIR)
 	rm -f $(DEMO_PROVIDER_BIN)
 	rm -f $(HTTP_PROVIDER_BIN)
 	rm -f $(AI_PROVIDER_BIN)
