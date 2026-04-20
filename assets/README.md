@@ -18,6 +18,6 @@ These assets are included in the provider artifact when packaged as an OCI image
 
 ## Distribution
 
-Assets are included from the `provider.yaml` assets layer when the tinx provider is packaged.
+Assets are included from the `provider.yaml` assets layer when the kiox provider is packaged.
 
 All files under `assets/**` are automatically included in the provider artifact.

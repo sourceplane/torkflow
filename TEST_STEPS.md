@@ -1,27 +1,27 @@
-# torkflow tinx provider test steps
+# torkflow kiox provider test steps
 
-This verifies end-to-end provider packaging, workspace install, and execution with the current tinx workspace model.
+This verifies end-to-end provider packaging, workspace install, and execution with the current kiox workspace model.
 
-## 1) Build `tinx` CLI (one-time)
+## 1) Build `kiox` CLI (one-time)
 
 From the repository root:
 
 ```bash
-cd sourceplane/tinx
-go build -o tinx ./cmd/tinx
+cd sourceplane/kiox
+go build -o kiox ./cmd/kiox
 ```
 
 ## 2) Run the smoke test
 
 ```bash
 cd ../torkflow
-make tinx-smoke-test
+make kiox-smoke-test
 ```
 
 The smoke test performs all of the following:
 
 - packages `torkflow` from `provider.yaml`
-- initializes a local tinx workspace at `.tinx-workspace`
+- initializes a local kiox workspace at `.kiox-workspace`
 - adds the packaged OCI layout as `torkflow`
 - runs `torkflow view --workflow examples/workflow.yaml`
 - runs `torkflow run --workflow examples/workflow.yaml ...`
@@ -31,8 +31,8 @@ The smoke test performs all of the following:
 
 Expected files after a successful run:
 
-- `.tinx-artifacts/status.txt`
-- `.tinx-artifacts/view.txt`
-- `.tinx-artifacts/run.txt`
-- `.tinx-artifacts/runs/demo-workflow/tinx-smoke-test/state.json`
-- `.tinx-artifacts/runs/demo-workflow/tinx-smoke-test/context.json`
+- `.kiox-artifacts/status.txt`
+- `.kiox-artifacts/view.txt`
+- `.kiox-artifacts/run.txt`
+- `.kiox-artifacts/runs/demo-workflow/kiox-smoke-test/state.json`
+- `.kiox-artifacts/runs/demo-workflow/kiox-smoke-test/context.json`

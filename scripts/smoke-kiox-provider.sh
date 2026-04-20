@@ -5,13 +5,13 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 
-TINX_BIN="${TINX_BIN:-${TINX:-tinx}}"
-MANIFEST_PATH="${TINX_MANIFEST:-provider.yaml}"
-DIST_DIR="${TINX_DIST_DIR:-dist}"
-OCI_DIR="${TINX_OCI_DIR:-oci}"
-WORKSPACE_DIR="${TINX_WORKSPACE_DIR:-.tinx-workspace}"
-ARTIFACT_DIR="${TINX_ARTIFACT_DIR:-.tinx-artifacts}"
-EXECUTION_ID="${TINX_EXECUTION_ID:-tinx-smoke-test}"
+KIOX_BIN="${KIOX_BIN:-${KIOX:-kiox}}"
+MANIFEST_PATH="${KIOX_MANIFEST:-provider.yaml}"
+DIST_DIR="${KIOX_DIST_DIR:-dist}"
+OCI_DIR="${KIOX_OCI_DIR:-oci}"
+WORKSPACE_DIR="${KIOX_WORKSPACE_DIR:-.kiox-workspace}"
+ARTIFACT_DIR="${KIOX_ARTIFACT_DIR:-.kiox-artifacts}"
+EXECUTION_ID="${KIOX_EXECUTION_ID:-kiox-smoke-test}"
 ARTIFACT_ROOT="$REPO_ROOT/$ARTIFACT_DIR"
 RUNS_DIR="$ARTIFACT_ROOT/runs"
 STATUS_LOG="$ARTIFACT_ROOT/status.txt"
@@ -40,12 +40,12 @@ EOF
 
 make provider
 
-"$TINX_BIN" release --manifest "$MANIFEST_PATH" --main ./cmd/torkflow --dist "$DIST_DIR" --output "$OCI_DIR"
-"$TINX_BIN" init "$WORKSPACE_DIR"
-"$TINX_BIN" --workspace "$WORKSPACE_DIR" add "$REPO_ROOT/$OCI_DIR" as torkflow
-"$TINX_BIN" --workspace "$WORKSPACE_DIR" status | tee "$STATUS_LOG"
-"$TINX_BIN" --workspace "$WORKSPACE_DIR" -- torkflow view --workflow "$REPO_ROOT/examples/workflow.yaml" | tee "$VIEW_LOG"
-"$TINX_BIN" --workspace "$WORKSPACE_DIR" -- torkflow run --workflow "$REPO_ROOT/examples/workflow.yaml" --action-stores "$REPO_ROOT/actionStore" --connections "$CONNECTIONS_FILE" --secrets "$SECRETS_FILE" --runs "$RUNS_DIR" --execution "$EXECUTION_ID" | tee "$RUN_LOG"
+"$KIOX_BIN" release --manifest "$MANIFEST_PATH" --main ./cmd/torkflow --dist "$DIST_DIR" --output "$OCI_DIR"
+"$KIOX_BIN" init "$WORKSPACE_DIR"
+"$KIOX_BIN" --workspace "$WORKSPACE_DIR" add "$REPO_ROOT/$OCI_DIR" as torkflow
+"$KIOX_BIN" --workspace "$WORKSPACE_DIR" status | tee "$STATUS_LOG"
+"$KIOX_BIN" --workspace "$WORKSPACE_DIR" -- torkflow view --workflow "$REPO_ROOT/examples/workflow.yaml" | tee "$VIEW_LOG"
+"$KIOX_BIN" --workspace "$WORKSPACE_DIR" -- torkflow run --workflow "$REPO_ROOT/examples/workflow.yaml" --action-stores "$REPO_ROOT/actionStore" --connections "$CONNECTIONS_FILE" --secrets "$SECRETS_FILE" --runs "$RUNS_DIR" --execution "$EXECUTION_ID" | tee "$RUN_LOG"
 
 grep -q 'sourceplane/torkflow' "$STATUS_LOG"
 grep -q 'Workflow DAG (advanced): demo-workflow' "$VIEW_LOG"

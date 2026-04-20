@@ -25,7 +25,7 @@ jobs:
       - name: Run unit tests
         run: go test -race ./...
 
-  tinx-provider-smoke:
+  kiox-provider-smoke:
     runs-on: ubuntu-latest
     needs: go-test
     steps:
@@ -38,17 +38,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Smoke test packaged tinx provider
-        uses: sourceplane/tinx-action@v2
+      - name: Smoke test packaged kiox provider
+        uses: sourceplane/kiox-action@v2
         with:
           run: |
-            bash ./scripts/smoke-tinx-provider.sh
+            bash ./scripts/smoke-kiox-provider.sh
           artifacts: |
-            .tinx-artifacts/status.txt
-            .tinx-artifacts/view.txt
-            .tinx-artifacts/run.txt
-            .tinx-artifacts/runs/demo-workflow/tinx-smoke-test/state.json
-            .tinx-artifacts/runs/demo-workflow/tinx-smoke-test/context.json
-            .tinx-artifacts/runs/demo-workflow/tinx-smoke-test/steps/Build_Message.json
-            .tinx-artifacts/runs/demo-workflow/tinx-smoke-test/steps/Send_Message.json
-          artifact-name: tinx-provider-smoke
+            .kiox-artifacts/status.txt
+            .kiox-artifacts/view.txt
+            .kiox-artifacts/run.txt
+            .kiox-artifacts/runs/demo-workflow/kiox-smoke-test/state.json
+            .kiox-artifacts/runs/demo-workflow/kiox-smoke-test/context.json
+            .kiox-artifacts/runs/demo-workflow/kiox-smoke-test/steps/Build_Message.json
+            .kiox-artifacts/runs/demo-workflow/kiox-smoke-test/steps/Send_Message.json
+          artifact-name: kiox-provider-smoke
