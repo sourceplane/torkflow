@@ -41,6 +41,14 @@ type Engine struct {
 	// a step referencing a connection absent from the map is an error — the
 	// caller's grant is authoritative and fail-closed.
 	InjectedCredentials map[string]map[string]any
+	// SeedCompleted names steps to treat as already-succeeded (resume mode):
+	// the scheduler marks them SUCCEEDED without executing and unlocks their
+	// dependents. The caller is responsible for restoring their outputs into
+	// Context so downstream expressions still resolve.
+	SeedCompleted []string
+	// SeedBranches restores the branch each seeded step took in the prior run,
+	// so branch-conditional outbound edges re-route identically on resume.
+	SeedBranches map[string]string
 }
 
 func NewEngine(workflowPath string, runRoot string, actionStorePath string, connectionsPath string, secretsPath string, executionID string) (*Engine, error) {

@@ -102,6 +102,25 @@ func Run(stdin io.Reader, stdout io.Writer) int {
 		eng.Context["Trigger"] = req.With
 	}
 
+	// Resume (contract/v1 `resume`): seed the run with the steps that already
+	// succeeded in the latest prior run under this runDir, restore their outputs
+	// into the context, and re-execute only the rest. The embedding caller is
+	// responsible for digest guards (same workflow, same engine).
+	var seededSkipped []StepResult
+	if req.Resume {
+		if prior := latestRunDir(runsRoot, eng.WorkflowID, eng.ExecutionID); prior != "" {
+			succeeded, branches := readPriorSucceeded(prior)
+			eng.SeedCompleted = succeeded
+			eng.SeedBranches = branches
+			if priorSteps := readPriorStepOutputs(prior, succeeded); priorSteps != nil {
+				eng.Context["Steps"] = priorSteps
+			}
+			for _, name := range succeeded {
+				seededSkipped = append(seededSkipped, StepResult{Name: name, Status: "skipped"})
+			}
+		}
+	}
+
 	// In backend mode stdout belongs to the contract: exactly one Response
 	// document on the writer this function was handed. Engine and core-action
 	// prints go wherever the process's os.Stdout points — the CLI entrypoint
@@ -110,7 +129,7 @@ func Run(stdin io.Reader, stdout io.Writer) int {
 	runErr := eng.Run()
 
 	runDir := filepath.Join(runsRoot, eng.WorkflowID, eng.ExecutionID)
-	res := Response{Contract: ContractV1, Status: "success", Steps: collectTimeline(runDir)}
+	res := Response{Contract: ContractV1, Status: "success", Steps: append(seededSkipped, collectTimeline(runDir)...)}
 	if runErr != nil {
 		res.Status = "failed"
 		res.Error = runErr.Error()
@@ -203,6 +222,85 @@ func firstExistingDir(dirs []string) string {
 		}
 	}
 	return ""
+}
+
+// latestRunDir returns the newest prior run directory for the workflow under
+// runsRoot, excluding the current execution. Execution ids are UTC timestamps,
+// so lexical order is chronological.
+func latestRunDir(runsRoot, workflowID, currentExecID string) string {
+	entries, err := os.ReadDir(filepath.Join(runsRoot, workflowID))
+	if err != nil {
+		return ""
+	}
+	latest := ""
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == currentExecID {
+			continue
+		}
+		if e.Name() > latest {
+			latest = e.Name()
+		}
+	}
+	if latest == "" {
+		return ""
+	}
+	return filepath.Join(runsRoot, workflowID, latest)
+}
+
+// readPriorSucceeded reads a prior run's step records and returns the names of
+// steps that SUCCEEDED (never SKIPPED — a step skipped because of an upstream
+// failure must re-run on resume) plus the branches they took.
+func readPriorSucceeded(runDir string) ([]string, map[string]string) {
+	entries, err := os.ReadDir(filepath.Join(runDir, "steps"))
+	if err != nil {
+		return nil, nil
+	}
+	var succeeded []string
+	branches := map[string]string{}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		data, rerr := os.ReadFile(filepath.Join(runDir, "steps", e.Name()))
+		if rerr != nil {
+			continue
+		}
+		var rec state.StepRecord
+		if json.Unmarshal(data, &rec) != nil {
+			continue
+		}
+		if rec.Status == "SUCCEEDED" {
+			succeeded = append(succeeded, rec.Name)
+			if rec.Branch != "" {
+				branches[rec.Name] = rec.Branch
+			}
+		}
+	}
+	return succeeded, branches
+}
+
+// readPriorStepOutputs restores the succeeded steps' outputs from the prior
+// run's context, so downstream expressions resolve on resume.
+func readPriorStepOutputs(runDir string, succeeded []string) map[string]any {
+	data, err := os.ReadFile(filepath.Join(runDir, "context.json"))
+	if err != nil {
+		return nil
+	}
+	var ctx map[string]any
+	if json.Unmarshal(data, &ctx) != nil {
+		return nil
+	}
+	priorSteps, ok := ctx["Steps"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := map[string]any{}
+	for _, name := range succeeded {
+		if v, ok := priorSteps[name]; ok {
+			out[name] = v
+		}
+	}
+	return out
 }
 
 // collectTimeline reads the run's per-step records and maps them onto the
