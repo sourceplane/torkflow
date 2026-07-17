@@ -65,6 +65,26 @@ func (s *Scheduler) Run() error {
 		return completed + failed
 	}
 
+	// Resume seeding: steps the caller marked already-succeeded are completed
+	// without execution, and their outbound edges unlock dependents exactly as a
+	// live success would — re-routing along the branch recorded in the prior run.
+	if len(s.engine.SeedCompleted) > 0 {
+		var seeded []string
+		mu.Lock()
+		for _, name := range s.engine.SeedCompleted {
+			if _, ok := steps[name]; ok && status[name] != "SUCCEEDED" {
+				status[name] = "SUCCEEDED"
+				completed++
+				seeded = append(seeded, name)
+			}
+		}
+		_ = s.updateState(status)
+		mu.Unlock()
+		for _, name := range seeded {
+			s.scheduleOutbound(name, s.engine.SeedBranches[name], inboundSatisfied, inboundTotal, status, readyCh, &mu)
+		}
+	}
+
 	for doneCount() < totalSteps {
 		select {
 		case stepName := <-readyCh:

@@ -219,6 +219,51 @@ func TestBackendFailurePropagates(t *testing.T) {
 	}
 }
 
+func TestBackendResumeSkipsSucceededSteps(t *testing.T) {
+	dir := t.TempDir()
+	wf := filepath.Join(dir, "wf.yaml")
+	runs := filepath.Join(dir, "runs")
+
+	// Run 1: First succeeds, Second fails (unknown action).
+	broken := strings.Replace(coreWorkflow, "actionRef: core.stdout\n      parameters:\n        title: second", "actionRef: no.such.action", 1)
+	if !strings.Contains(broken, "no.such.action") {
+		t.Fatalf("fixture edit failed")
+	}
+	if err := os.WriteFile(wf, []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req1, _ := json.Marshal(Request{Contract: ContractV1, Workflow: wf, RunDir: runs})
+	var out1 bytes.Buffer
+	if code := Run(bytes.NewReader(req1), &out1); code == 0 {
+		t.Fatalf("run 1 should fail: %s", out1.String())
+	}
+
+	// Fix the workflow (the embedding caller guards digests; the engine obeys the
+	// request) and resume: First must be skipped, Second must now succeed.
+	if err := os.WriteFile(wf, []byte(coreWorkflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req2, _ := json.Marshal(Request{Contract: ContractV1, Workflow: wf, RunDir: runs, Resume: true})
+	var out2 bytes.Buffer
+	if code := Run(bytes.NewReader(req2), &out2); code != 0 {
+		t.Fatalf("resume should succeed: %s", out2.String())
+	}
+	var res Response
+	if err := json.Unmarshal(out2.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]string{}
+	for _, s := range res.Steps {
+		byName[s.Name] = s.Status
+	}
+	if byName["First"] != "skipped" {
+		t.Fatalf("First must be seeded as skipped on resume: %#v", res.Steps)
+	}
+	if byName["Second"] != "success" {
+		t.Fatalf("Second must re-execute and succeed on resume: %#v", res.Steps)
+	}
+}
+
 func TestBackendRejectsUnknownContract(t *testing.T) {
 	var out bytes.Buffer
 	code := Run(strings.NewReader(`{"contract":"v9","workflow":"x.yaml"}`), &out)
