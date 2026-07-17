@@ -16,6 +16,13 @@ type WorkflowSpec struct {
 	Steps            []Step         `yaml:"steps"`
 	Connections      map[string]any `yaml:"connections"`
 	MaxParallelSteps int            `yaml:"maxParallelSteps"`
+	// Outputs declares the workflow's named outputs: name → a {{ }} expression
+	// evaluated against the final run context. In backend mode (contract/v1)
+	// ONLY these evaluated outputs cross back to the embedding caller — the raw
+	// context never does. Output names are part of the file's content, so
+	// callers that pin the workflow by digest can validate references to them
+	// at compile time.
+	Outputs map[string]string `yaml:"outputs"`
 }
 
 type Step struct {

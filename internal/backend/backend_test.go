@@ -150,6 +150,53 @@ func TestBackendEndToEnd(t *testing.T) {
 	}
 }
 
+const outputsWorkflow = `apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: outputs-e2e
+spec:
+  outputs:
+    sum: "{{ Steps.Calc.result }}"
+    who: "{{ Trigger.who }}"
+  steps:
+    - name: Calc
+      actionRef: core.js
+      parameters:
+        script: "20 + 22"
+`
+
+func TestBackendEvaluatesDeclaredOutputsOnly(t *testing.T) {
+	dir := t.TempDir()
+	wf := filepath.Join(dir, "wf.yaml")
+	if err := os.WriteFile(wf, []byte(outputsWorkflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := json.Marshal(Request{
+		Contract: ContractV1,
+		Workflow: wf,
+		With:     map[string]any{"who": "wx4"},
+		RunDir:   filepath.Join(dir, "runs"),
+	})
+	var out bytes.Buffer
+	if code := Run(bytes.NewReader(req), &out); code != 0 {
+		t.Fatalf("backend exit=%d output=%s", code, out.String())
+	}
+	var res Response
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Outputs["sum"] != "42" || res.Outputs["who"] != "wx4" {
+		t.Fatalf("declared outputs not evaluated: %#v", res.Outputs)
+	}
+	if len(res.Outputs) != 2 {
+		t.Fatalf("ONLY declared outputs may cross: %#v", res.Outputs)
+	}
+	// The raw context (Steps.*) must not appear anywhere in the response.
+	if strings.Contains(out.String(), "\"Steps\"") || strings.Contains(out.String(), "\"Trigger\"") {
+		t.Fatalf("raw context leaked into the response: %s", out.String())
+	}
+}
+
 func TestBackendFailurePropagates(t *testing.T) {
 	dir := t.TempDir()
 	wf := filepath.Join(dir, "wf.yaml")
