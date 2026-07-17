@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"torkflow/internal/engine"
+	"torkflow/internal/expression"
 	"torkflow/internal/state"
 )
 
@@ -132,9 +133,37 @@ func Run(stdin io.Reader, stdout io.Writer) int {
 			}
 		}
 	}
-	// Outputs: the workflow's declared spec.outputs (WX4). Until the field
-	// lands, a run returns no outputs — never the raw context (invariant 12).
+	// Evaluate the workflow's declared spec.outputs against the final context.
+	// ONLY declared outputs cross the boundary — never the raw context.
+	if res.Status == "success" && len(eng.Workflow.Spec.Outputs) > 0 {
+		outputs, oerr := evaluateOutputs(eng)
+		if oerr != nil {
+			res.Status = "failed"
+			res.Error = oerr.Error()
+		} else {
+			res.Outputs = outputs
+		}
+	}
 	return respond(stdout, res)
+}
+
+// evaluateOutputs resolves each declared output expression against the run's
+// final context. A declared output that fails to evaluate fails the run —
+// a caller compiled against these names must be able to rely on them.
+func evaluateOutputs(eng *engine.Engine) (map[string]any, error) {
+	finalCtx, err := eng.SnapshotContext()
+	if err != nil {
+		return nil, fmt.Errorf("snapshot context for outputs: %w", err)
+	}
+	out := make(map[string]any, len(eng.Workflow.Spec.Outputs))
+	for name, expr := range eng.Workflow.Spec.Outputs {
+		value, rerr := expression.ResolveString(expr, finalCtx)
+		if rerr != nil {
+			return nil, fmt.Errorf("evaluate output %q: %w", name, rerr)
+		}
+		out[name] = value
+	}
+	return out, nil
 }
 
 // respond writes the response and derives the exit code from its status.
