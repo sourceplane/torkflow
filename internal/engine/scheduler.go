@@ -56,8 +56,16 @@ func (s *Scheduler) Run() error {
 	totalSteps := len(steps)
 	completed := 0
 	failed := 0
+	// All writes to completed/failed happen under mu (workers, skip handling);
+	// the loop conditions must read them under the same lock or the race
+	// detector rightly flags them.
+	doneCount := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return completed + failed
+	}
 
-	for completed+failed < totalSteps {
+	for doneCount() < totalSteps {
 		select {
 		case stepName := <-readyCh:
 			mu.Lock()
@@ -138,7 +146,7 @@ func (s *Scheduler) Run() error {
 			}(stepName)
 
 		default:
-			if completed+failed >= totalSteps {
+			if doneCount() >= totalSteps {
 				break
 			}
 
