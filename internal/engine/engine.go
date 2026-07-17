@@ -35,6 +35,12 @@ type Engine struct {
 	ConnectionRegistry *connections.Registry
 	SecretStore        connections.SecretStore
 	Validator          *validation.JSONSchemaValidator
+	// InjectedCredentials, when non-nil, is the ONLY credential source: payloads
+	// keyed by connection name, provided by an embedding caller (backend mode,
+	// contract/v1). The file registry and secret store are bypassed entirely, and
+	// a step referencing a connection absent from the map is an error — the
+	// caller's grant is authoritative and fail-closed.
+	InjectedCredentials map[string]map[string]any
 }
 
 func NewEngine(workflowPath string, runRoot string, actionStorePath string, connectionsPath string, secretsPath string, executionID string) (*Engine, error) {
@@ -217,6 +223,26 @@ func (e *Engine) ResolveConnections(step workflow.Step) map[string]any {
 }
 
 func (e *Engine) ResolveCredential(step workflow.Step, action registry.ActionDescriptor) (map[string]any, error) {
+	// Backend mode: injected credentials are authoritative and exclusive.
+	if e.InjectedCredentials != nil {
+		if step.Connection == "" {
+			if action.CredentialType != "" {
+				return nil, fmt.Errorf("action %s requires connection type %s", action.Name, action.CredentialType)
+			}
+			return map[string]any{}, nil
+		}
+		credential, ok := e.InjectedCredentials[step.Connection]
+		if !ok {
+			return nil, fmt.Errorf("connection %q was not provided in the backend request", step.Connection)
+		}
+		if action.CredentialSchema != nil {
+			if err := e.Validator.Validate(action.CredentialSchema, credential); err != nil {
+				return nil, fmt.Errorf("credential schema validation failed for %s: %w", action.Name, err)
+			}
+		}
+		return credential, nil
+	}
+
 	if step.Connection == "" {
 		legacy := e.ResolveConnections(step)
 		if len(legacy) == 0 {
