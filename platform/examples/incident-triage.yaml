@@ -1,0 +1,140 @@
+# Datadog-style incident triage: alert webhook in, enrichment, AI summary,
+# a human approval gate, then paging.
+#
+# Everything here runs on the platform with no binary providers: core.*, http.*,
+# ai.* and slack.* are all native actions.
+apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: incident-triage
+  description: Triage an inbound alert, summarise it, and page after approval.
+
+spec:
+  maxParallelSteps: 4
+
+  # Declared inputs are validated before a run is created, so a malformed alert
+  # is rejected at the trigger rather than failing at the first step.
+  inputs:
+    service:
+      type: string
+      required: true
+      description: The service that alerted.
+    severity:
+      type: string
+      required: true
+      enum: [sev1, sev2, sev3]
+    dashboardUrl:
+      type: string
+      default: ""
+
+  triggers:
+    - type: webhook
+      name: alert-received
+
+  steps:
+    - name: Fetch_Recent_Errors
+      actionRef: http.request.auth
+      connection: observability-api
+      parameters:
+        method: GET
+        url: "https://api.example.com/v1/services/{{ Trigger.service }}/errors?window=15m"
+        parseJson: true
+        timeoutSeconds: 20
+      retry:
+        maxRetries: 3
+        baseDelaySeconds: 2
+      outboundEdges:
+        - nextStepName: Summarise
+
+    - name: Fetch_Recent_Deploys
+      actionRef: http.request.auth
+      connection: observability-api
+      parameters:
+        method: GET
+        url: "https://api.example.com/v1/services/{{ Trigger.service }}/deploys?limit=5"
+        parseJson: true
+        timeoutSeconds: 20
+      outboundEdges:
+        - nextStepName: Summarise
+
+    - name: Summarise
+      actionRef: ai.anthropic.chat
+      connection: anthropic
+      readinessGate:
+        thresholdType: ALL
+      parameters:
+        model: claude-sonnet-4-5
+        maxTokens: 800
+        messages:
+          - role: system
+            content: You are an SRE. Be concise and specific. No preamble.
+          - role: user
+            content:
+              fromFile:
+                path: prompts/triage.md
+                template: true
+      outboundEdges:
+        - nextStepName: Is_High_Severity
+
+    - name: Is_High_Severity
+      actionRef: core.if
+      parameters:
+        condition: "Trigger.severity === 'sev1' || Trigger.severity === 'sev2'"
+      outboundEdges:
+        - nextStepName: Request_Page_Approval
+          branchName: "true"
+        - nextStepName: Post_To_Channel
+          branchName: "false"
+
+    # A durable approval gate. The instance hibernates until someone decides,
+    # holding no concurrency slot and costing nothing while it waits.
+    - name: Request_Page_Approval
+      actionRef: core.approval
+      parameters:
+        title: "Page the on-call for {{ Trigger.service }}?"
+        description: "{{ Steps.Summarise.text }}"
+        approvers: [sre-leads]
+        timeout: 30 minutes
+        # Unattended after 30 minutes, page anyway — for a sev1 the safe
+        # default is to escalate, not to stay quiet.
+        onTimeout: approve
+      outboundEdges:
+        - nextStepName: Page_On_Call
+          branchName: approve
+        - nextStepName: Post_To_Channel
+          branchName: reject
+
+    - name: Page_On_Call
+      actionRef: http.request.auth
+      connection: pagerduty
+      parameters:
+        method: POST
+        url: https://events.pagerduty.com/v2/enqueue
+        parseJson: true
+        body:
+          event_action: trigger
+          payload:
+            summary: "[{{ Trigger.severity }}] {{ Trigger.service }}"
+            severity: critical
+            source: torkflow
+            custom_details:
+              analysis: "{{ Steps.Summarise.text }}"
+      outboundEdges:
+        - nextStepName: Post_To_Channel
+
+    - name: Post_To_Channel
+      actionRef: slack.postMessage
+      connection: slack
+      # Reached from three different places; ANY means the first one wins.
+      readinessGate:
+        thresholdType: ANY
+      # Failing to post to Slack should not fail an incident response that has
+      # already paged someone.
+      continueOnError: true
+      parameters:
+        channel: "#incidents"
+        text: "*{{ Trigger.severity }}* — {{ Trigger.service }}\n{{ Steps.Summarise.text }}"
+
+  outputs:
+    summary: "{{ Steps.Summarise.text }}"
+    paged: "{{ Steps.Page_On_Call ? true : false }}"

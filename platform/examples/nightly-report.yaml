@@ -1,0 +1,61 @@
+# A scheduled workflow. The cron lives in the file, so the definition and its
+# cadence are one reviewable artifact — publishing the workflow installs the
+# schedule.
+apiVersion: torkflow/v1
+kind: Workflow
+metadata:
+  name: nightly-usage-report
+
+spec:
+  triggers:
+    - type: schedule
+      name: weeknights
+      # 07:00 on weekdays, in Berlin local time. The schedule is evaluated in
+      # this timezone and stays at 07:00 local across DST changes.
+      cron: "0 7 * * 1-5"
+      timezone: Europe/Berlin
+
+  steps:
+    - name: Fetch_Usage
+      actionRef: http.request.auth
+      connection: analytics-api
+      parameters:
+        method: GET
+        url: https://api.example.com/v1/usage?window=24h
+        parseJson: true
+      retry:
+        maxRetries: 5
+        baseDelaySeconds: 10
+      outboundEdges:
+        - nextStepName: Build_Report
+
+    - name: Build_Report
+      actionRef: core.js
+      parameters:
+        script: |
+          const rows = Steps.Fetch_Usage.json.accounts || [];
+          const top = rows
+            .filter(r => r.calls > 0)
+            .sort((a, b) => b.calls - a.calls)
+            .slice(0, 10)
+            .map((r, i) => `${i + 1}. ${r.name} — ${r.calls.toLocaleString?.() ?? r.calls} calls`);
+          return {
+            total: rows.reduce((sum, r) => sum + r.calls, 0),
+            accountCount: rows.length,
+            lines: top.join("\n"),
+          };
+      outboundEdges:
+        - nextStepName: Send_Report
+
+    - name: Send_Report
+      actionRef: slack.postMessage
+      connection: slack
+      parameters:
+        channel: "#metrics"
+        text: |
+          *Nightly usage* — {{ Steps.Build_Report.total }} calls across {{ Steps.Build_Report.accountCount }} accounts
+
+          {{ Steps.Build_Report.lines }}
+
+  outputs:
+    total: "{{ Steps.Build_Report.total }}"
