@@ -21,3 +21,9 @@ actionStore/ai/ai-runtime
 
 # Local secrets
 secrets.yaml
+
+# TypeScript platform
+platform/node_modules/
+platform/.wrangler/
+platform/dist/
+platform/.dev.vars
