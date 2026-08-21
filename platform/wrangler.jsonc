@@ -1,0 +1,86 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "torkflow-platform",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Workflows: one instance per workflow execution. The driver inside
+  // TorkflowRunner is deterministic and replay-safe.
+  "workflows": [
+    {
+      "name": "torkflow-runner",
+      "binding": "RUNNER",
+      "class_name": "TorkflowRunner"
+    }
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      // Live DAG streaming to the run UI (WebSocket hibernation).
+      { "name": "RUN_STREAM", "class_name": "RunStream" },
+      // One alarm per schedule — exact per-tenant cron timing.
+      { "name": "SCHEDULER", "class_name": "ScheduleKeeper" }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RunStream", "ScheduleKeeper"]
+    }
+  ],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "torkflow",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    // Workflow bundles (content-addressed YAML + assets) and step payload
+    // spill for results over the 1 MiB step-result ceiling.
+    { "binding": "BUNDLES", "bucket_name": "torkflow-bundles" },
+    { "binding": "PAYLOADS", "bucket_name": "torkflow-payloads" }
+  ],
+
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "00000000000000000000000000000000" }
+  ],
+
+  "queues": {
+    "producers": [{ "binding": "TRIGGERS", "queue": "torkflow-triggers" }],
+    "consumers": [
+      {
+        "queue": "torkflow-triggers",
+        "max_batch_size": 25,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "torkflow-triggers-dlq"
+      }
+    ]
+  },
+
+  // Sweeper for missed schedule alarms. Per-schedule timing comes from
+  // ScheduleKeeper alarms, not from this tick.
+  "triggers": { "crons": ["* * * * *"] },
+
+  "ai": { "binding": "AI" },
+
+  "vars": {
+    "TORKFLOW_ENV": "development",
+    // Spill step results larger than this to R2 (Workflows caps a step result
+    // at 1 MiB; this leaves headroom for the envelope).
+    "PAYLOAD_SPILL_BYTES": "262144"
+  },
+
+  // Dynamic Workers: isolate sandbox for tenant-authored core.js scripts.
+  // Requires the Worker Loader binding (open beta).
+  "unsafe": {
+    "bindings": [{ "name": "JS_LOADER", "type": "worker-loader" }]
+  }
+}
